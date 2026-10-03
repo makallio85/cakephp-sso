@@ -5,7 +5,7 @@ provider (`id.rocksoftware.fi`, Authentik) with OpenID Connect. Each application
 its `users` table as the anchor for its foreign keys; the plugin creates and refreshes
 those rows from the provider, so no application manages people itself.
 
-Design: [makallio85/rocksoftware-identity#5](https://github.com/makallio85/rocksoftware-identity/issues/5). Private repository.
+Design: [makallio85/rocksoftware-identity#5](https://github.com/makallio85/rocksoftware-identity/issues/5).
 
 ## What it does
 
@@ -33,8 +33,8 @@ Authorization stays in the application. The plugin only establishes who the user
 
 ## Installing in an application
 
-1. **Composer.** The repository is private, so the application needs a VCS repository
-   entry and a GitHub token at build time (see the consuming app's Dockerfile and CI):
+1. **Composer.** The package is not on Packagist, so the application names this
+   repository. It is public: no token is needed in builds or CI.
 
    ```json
    "repositories": [{"type": "vcs", "url": "https://github.com/makallio85/cakephp-sso"}],

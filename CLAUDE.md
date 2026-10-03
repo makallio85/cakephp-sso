@@ -1,6 +1,6 @@
 # Agent guide — cakephp-sso
 
-A **CakePHP 5 plugin** (private Composer package `makallio85/cakephp-sso`) that signs
+A **CakePHP 5 plugin** (Composer package `makallio85/cakephp-sso`, public repository) that signs
 users in through the central identity provider with OpenID Connect. It is installed by
 every Rock Software CakePHP application, so a change here reaches all of them. The
 container defined in `docker-compose.yml` is a development sandbox, not a deployment.
