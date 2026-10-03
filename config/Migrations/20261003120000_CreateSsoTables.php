@@ -22,7 +22,10 @@ class CreateSsoTables extends BaseMigration
 {
     public function up(): void
     {
-        $this->table('identity_source_types')
+        // Unsigned, so applications' unsigned user and foreign key columns
+        // can point at it whichever primary key default the host app uses.
+        $this->table('identity_source_types', ['id' => false, 'primary_key' => ['id']])
+            ->addColumn('id', 'integer', ['autoIncrement' => true, 'signed' => false, 'null' => false])
             ->addColumn('code', 'string', ['limit' => 32, 'null' => false])
             ->addColumn('label', 'string', ['limit' => 100, 'null' => false])
             ->addColumn('sort_order', 'integer', ['null' => false, 'default' => 0])
