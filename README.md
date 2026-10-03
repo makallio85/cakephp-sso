@@ -5,7 +5,7 @@ provider (`id.rocksoftware.fi`, Authentik) with OpenID Connect. Each application
 its `users` table as the anchor for its foreign keys; the plugin creates and refreshes
 those rows from the provider, so no application manages people itself.
 
-Design: issue in `makallio85/rocksoftware-identity`. Private repository.
+Design: [makallio85/rocksoftware-identity#5](https://github.com/makallio85/rocksoftware-identity/issues/5). Private repository.
 
 ## What it does
 
