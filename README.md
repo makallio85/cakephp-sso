@@ -33,13 +33,13 @@ Authorization stays in the application. The plugin only establishes who the user
 
 ## Installing in an application
 
-1. **Composer.** The package is not on Packagist, so the application names this
-   repository. It is public: no token is needed in builds or CI.
+1. **Composer.** Published on Packagist:
 
-   ```json
-   "repositories": [{"type": "vcs", "url": "https://github.com/makallio85/cakephp-sso"}],
-   "require": {"makallio85/cakephp-sso": "dev-master"}
+   ```bash
+   composer require makallio85/cakephp-sso:^1.0
    ```
+
+   Releases are tags on `master` (semantic versioning).
 
 2. **Plugin.** `$this->addPlugin(\Sso\SsoPlugin::class);` in `Application::bootstrap()`.
 
