@@ -26,15 +26,15 @@ class IdentitySourceTypesTable extends Table
     }
 
     /**
-     * The id of the row with the given code.
+     * The id of the row with the given value.
      *
-     * @param string $code One of the `IdentitySourceType` code constants.
+     * @param string $value One of the `IdentitySourceType` value constants.
      * @return int
      */
-    public function idForCode(string $code): int
+    public function idFor(string $value): int
     {
         /** @var \Sso\Model\Entity\IdentitySourceType $row */
-        $row = $this->find()->where(['code' => $code])->firstOrFail();
+        $row = $this->find()->where(['value' => $value])->firstOrFail();
 
         return $row->id;
     }

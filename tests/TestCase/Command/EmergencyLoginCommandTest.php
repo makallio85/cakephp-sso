@@ -24,7 +24,7 @@ class EmergencyLoginCommandTest extends TestCase
             'password' => 'hashed',
             'name' => 'Admin',
             'is_active' => true,
-            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idForCode(IdentitySourceType::LOCAL),
+            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::LOCAL),
         ], ['accessibleFields' => ['*' => true]]));
 
         $this->exec('sso emergency_login admin@example.test');

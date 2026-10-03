@@ -9,7 +9,7 @@ use Migrations\BaseMigration;
  * `identity_source_types` is the type table the consuming application's
  * `users.identity_source_id` points at: a user row is either a local account
  * or a cache of an identity provider account. Its two rows are system rows that
- * application code binds to by code.
+ * application code binds to by value.
  *
  * `sso_settings` holds the one provider connection. It lives in the database,
  * not the environment, and the client secret is stored encrypted.
@@ -26,16 +26,16 @@ class CreateSsoTables extends BaseMigration
         // can point at it whichever primary key default the host app uses.
         $this->table('identity_source_types', ['id' => false, 'primary_key' => ['id']])
             ->addColumn('id', 'integer', ['autoIncrement' => true, 'signed' => false, 'null' => false])
-            ->addColumn('code', 'string', ['limit' => 32, 'null' => false])
+            ->addColumn('value', 'string', ['limit' => 32, 'null' => false])
             ->addColumn('label', 'string', ['limit' => 100, 'null' => false])
             ->addColumn('sort_order', 'integer', ['null' => false, 'default' => 0])
-            ->addIndex(['code'], ['unique' => true])
+            ->addIndex(['value'], ['unique' => true])
             ->create();
 
         $this->table('identity_source_types')
             ->insert([
-                ['code' => 'local', 'label' => 'Local account', 'sort_order' => 10],
-                ['code' => 'sso', 'label' => 'Identity provider', 'sort_order' => 20],
+                ['value' => 'local', 'label' => 'Local account', 'sort_order' => 10],
+                ['value' => 'sso', 'label' => 'Identity provider', 'sort_order' => 20],
             ])
             ->save();
 

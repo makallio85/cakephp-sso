@@ -62,7 +62,7 @@ class UserProvisioner
             $fields['external_id'] => $subject,
             $fields['email'] => $email,
             $fields['identity_source_id'] => $this->fetchTable('Sso.IdentitySourceTypes')
-                ->idForCode(IdentitySourceType::SSO),
+                ->idFor(IdentitySourceType::SSO),
             $fields['synced_at'] => DateTime::now(),
         ];
         if ($fields['name'] !== null) {

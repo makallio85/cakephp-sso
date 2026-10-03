@@ -89,7 +89,7 @@ class SsoControllerTest extends TestCase
         $this->assertSame('person@example.test', $user->email);
         $this->assertSame('Person One', $user->name);
         $this->assertSame(
-            $this->fetchTable('Sso.IdentitySourceTypes')->idForCode(IdentitySourceType::SSO),
+            $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::SSO),
             $user->identity_source_id,
         );
         $this->assertSame($user->id, $this->sessionValue('Auth')->id);
@@ -256,7 +256,7 @@ class SsoControllerTest extends TestCase
             'password' => 'hashed',
             'name' => 'Local User',
             'is_active' => true,
-            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idForCode(IdentitySourceType::LOCAL),
+            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::LOCAL),
         ], ['accessibleFields' => ['*' => true]]));
     }
 }

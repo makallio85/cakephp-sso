@@ -9,7 +9,7 @@ use Cake\ORM\Entity;
  * Where a user row's identity comes from.
  *
  * @property int $id
- * @property string $code
+ * @property string $value
  * @property string $label
  * @property int $sort_order
  */
@@ -22,10 +22,17 @@ class IdentitySourceType extends Entity
     public const SSO = 'sso';
 
     /**
+     * Every value, in display order.
+     *
+     * @var array<int, string>
+     */
+    public const ALL = [self::LOCAL, self::SSO];
+
+    /**
      * @var array<string, bool>
      */
     protected array $_accessible = [
-        'code' => true,
+        'value' => true,
         'label' => true,
         'sort_order' => true,
     ];
