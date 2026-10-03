@@ -74,8 +74,10 @@ class ConfigureCommand extends Command
         if ($args->getOption('disable')) {
             $data['is_enabled'] = false;
         }
-        if ($current === null && !isset($data['client_secret']) && $io->interactive) {
-            $data['client_secret'] = $io->ask('Client secret');
+        if ($current === null && !isset($data['client_secret'])) {
+            // Read from the prompt (or piped stdin), so the secret stays out of
+            // shell history and the process list.
+            $data['client_secret'] = trim((string)$io->ask('Client secret'));
         }
 
         try {

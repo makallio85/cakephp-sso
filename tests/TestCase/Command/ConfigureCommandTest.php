@@ -26,6 +26,20 @@ class ConfigureCommandTest extends TestCase
         $this->assertSame('s3cret', $settings->clientSecret($setting));
     }
 
+    public function testAsksForSecretWhenLeftOut(): void
+    {
+        $this->exec(
+            'sso configure --issuer https://id.example.test/application/o/app --client-id app --enable',
+            ['from-the-prompt'],
+        );
+
+        $this->assertExitSuccess();
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        $setting = $settings->enabled();
+        $this->assertNotNull($setting);
+        $this->assertSame('from-the-prompt', $settings->clientSecret($setting));
+    }
+
     public function testRejectsPlainHttpIssuer(): void
     {
         $this->exec('sso configure --issuer http://id.example.test/ --client-id app --client-secret s');
