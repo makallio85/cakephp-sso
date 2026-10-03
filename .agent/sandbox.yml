@@ -1,0 +1,15 @@
+# Agent sandbox configuration.
+#
+# Tells bootstrap/agent-sandbox.sh which pre-built dev image to spin up for
+# this repo. See /srv/documentation/conventions/agents.md § Sandbox model.
+#
+# Available stacks (templates/dev/<stack>/Dockerfile):
+#   base    — debian + git + gh + jq + node 22 + claude (minimal)
+#   python  — base + python 3.12 + uv + ruff + mypy
+#   node    — base + pnpm + yarn + tsx + typescript
+#   multi   — python + node (FastAPI + Next.js, etc.)
+#   cakephp — base + php 8 + composer + common extensions
+#
+# Build images: bootstrap/build-agent-images.sh [stack...]
+
+stack: cakephp

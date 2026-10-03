@@ -1,0 +1,88 @@
+# docker-compose.yml — dev sandbox for the cakephp-sso plugin.
+#
+# This is NOT a product deployment. The plugin is a library; the container
+# is a long-running development workspace that agents (and humans via SSH)
+# exec into to run composer install, phpunit, and code edits against a live
+# DB + Redis. nginx serves a placeholder so Coolify's health check passes
+# and previews route something on the FQDN.
+#
+# Per-preview isolation: each git branch / PR gets its own stack
+# (app + db + redis + volumes) in an isolated Coolify namespace. When the
+# PR closes, the entire namespace and its volumes are destroyed.
+#
+# Coolify auto-injects SERVICE_FQDN_APP for routing.
+#
+# Variables set in the Coolify app's Environment Variables tab:
+#   DB_PASSWORD          (required, secret)
+#   DB_ROOT_PASSWORD     (required, secret)
+#   DB_NAME              (default: sso)
+#   DB_USER              (default: sso)
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    environment:
+      - SERVICE_FQDN_APP=/
+      - DB_HOST=${SERVICE_NAME_DB:-db}
+      - DB_PORT=3306
+      - DB_NAME=${DB_NAME:-sso}
+      - DB_USER=${DB_USER:-sso}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DATABASE_URL=mysql://${DB_USER:-sso}:${DB_PASSWORD}@${SERVICE_NAME_DB:-db}:3306/${DB_NAME:-sso}
+      - DATABASE_TEST_URL=mysql://${DB_USER:-sso}:${DB_PASSWORD}@${SERVICE_NAME_DB:-db}:3306/${DB_NAME:-sso}_test
+      - REDIS_URL=redis://${SERVICE_NAME_REDIS:-redis}:6379
+    expose:
+      - "80"
+    volumes:
+      # Operator credentials shared into the preview so agent-dispatch.sh
+      # can `gh auth token` + run `claude` in flatrate OAuth mode. www-data
+      # is remapped to UID 1000 in the Dockerfile so the mounts are readable.
+      # Safe here because this repo has no production deployment — see the
+      # template's notes if porting these mounts to a prod-bearing app.
+      - /home/makallio85/.config/gh:/home/www-data/.config/gh:ro
+      - /home/makallio85/.claude:/home/www-data/.claude:rw
+      - /home/makallio85/.claude.json:/home/www-data/.claude.json:rw
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/", "-o", "/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  db:
+    image: mariadb:11.4
+    environment:
+      - MARIADB_DATABASE=${DB_NAME:-sso}
+      - MARIADB_USER=${DB_USER:-sso}
+      - MARIADB_PASSWORD=${DB_PASSWORD}
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./docker/db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  dbdata:
+  redis_data:
