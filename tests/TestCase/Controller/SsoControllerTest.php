@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace Sso\Test\TestCase\Controller;
 
 use Cake\Cache\Cache;
+use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
 use Cake\Event\EventInterface;
 use Cake\Event\EventManager;
 use Cake\Http\Client;
 use Cake\I18n\DateTime;
+use Cake\I18n\I18n;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 use Cake\Utility\Hash;
@@ -202,6 +204,62 @@ class SsoControllerTest extends TestCase
 
         $this->post('/sso/emergency/' . $token);
         $this->assertRedirect('/users/login');
+    }
+
+    public function testSignInPageOffersRockSoftwareId(): void
+    {
+        $this->get('/sso?redirect=%2Fmessages');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('Sign in with Rock Software ID');
+        $this->assertResponseContains('/sso/login?redirect=%2Fmessages');
+    }
+
+    public function testSignInPageExplainsMissingConfiguration(): void
+    {
+        $this->fetchTable('Sso.SsoSettings')->store(['is_enabled' => false]);
+
+        $this->get('/sso');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('bin/cake sso configure');
+        $this->assertResponseNotContains('Sign in with Rock Software ID');
+    }
+
+    public function testSignInPageIsTranslated(): void
+    {
+        I18n::setLocale('fi');
+        try {
+            $this->get('/sso');
+        } finally {
+            I18n::setLocale('en_US');
+        }
+
+        $this->assertResponseContains('Kirjaudu Rock Software ID:llä');
+    }
+
+    public function testSignedInPersonIsSentOnFromSignInPage(): void
+    {
+        $this->completeSignIn([]);
+        $this->session($_SESSION);
+
+        $this->get('/sso');
+
+        $this->assertRedirect('/dashboard');
+    }
+
+    public function testSignInStampsSessionAndLastLogin(): void
+    {
+        Configure::write('Sso.lastLoginField', 'last_login_at');
+        try {
+            $this->completeSignIn([]);
+        } finally {
+            Configure::delete('Sso.lastLoginField');
+        }
+
+        $this->assertIsInt($this->sessionValue(SsoSession::ESTABLISHED_AT));
+        $user = $this->fetchTable('Users')->find()->where(['external_id' => 'subject-1'])->firstOrFail();
+        $this->assertInstanceOf(DateTime::class, $user->last_login_at);
     }
 
     public function testDisabledSettingRefusesLogin(): void

@@ -26,6 +26,13 @@ final class SsoSession
     /** The authorization request in progress: state, nonce, verifier, redirect. */
     public const FLOW = 'Sso.flow';
 
+    /**
+     * When this session was established (Unix time). The session check compares
+     * it with the user's `sessionsValidFromField` to end sessions a back-channel
+     * logout invalidated.
+     */
+    public const ESTABLISHED_AT = 'Sso.establishedAt';
+
     public const METHOD_OIDC = 'oidc';
     public const METHOD_EMERGENCY = 'emergency';
 

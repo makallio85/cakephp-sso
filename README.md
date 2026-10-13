@@ -11,11 +11,17 @@ Design: [makallio85/rocksoftware-identity#5](https://github.com/makallio85/rocks
 
 | Route | Purpose |
 |---|---|
+| `GET /sso?redirect=/path` | The sign-in page: one "Sign in with Rock Software ID" button, and the reason for a failed sign-in |
 | `GET /sso/login?redirect=/path` | Starts the authorization code flow with PKCE |
 | `GET /sso/callback` | Redirect URI registered at the provider |
 | `GET\|POST /sso/logout` | Signs out here and at the provider |
 | `POST /sso/backchannel-logout` | Back-channel logout URI registered at the provider |
 | `GET\|POST /sso/emergency/{token}` | Single-use sign-in from `bin/cake sso emergency_login` |
+| `GET /sso/settings`, `POST /sso/settings/update`, `POST /sso/settings/test` | Settings › Identity provider: issuer, client ID, write-only secret, required group. Save checks the server first and stores nothing if it does not answer |
+
+It also ships `Sso\Middleware\SessionCheckMiddleware`, which signs out a session whose
+user is gone or deactivated, or which started before a back-channel logout, and Finnish
+translations of every text (`resources/locales/fi/sso.po`, domain `sso`).
 
 - ID and logout tokens are verified against the provider's JWKS with `firebase/php-jwt`;
   only asymmetric algorithms are accepted. Issuer, audience, nonce, state and PKCE are
@@ -65,28 +71,48 @@ Authorization stays in the application. The plugin only establishes who the user
    ```php
    'Sso' => [
        'userModel' => 'Users',
-       'loginUrl' => '/users/login',
+       'loginUrl' => '/sso',                 // the plugin's sign-in page
        'loginRedirect' => '/',
-       'layout' => 'auth',
+       'layout' => 'auth',                   // layout of the sign-in and emergency pages
        'sessionsValidFromField' => 'sessions_valid_from',
+       'lastLoginField' => 'last_login_at',  // stamped at every sign-in; null to skip
        'createUsers' => true,
+       // Who may open Settings › Identity provider. Without it, nobody may.
+       'settingsAccess' => fn(\Authentication\IdentityInterface $identity): bool => true,
    ],
    ```
 
-6. **Events.** Listen where the application keeps its own side effects:
+   Point the Authentication service's `unauthenticatedRedirect` at `/sso` as well.
+
+6. **Session check.** Add the middleware right after `AuthenticationMiddleware`:
+
+   ```php
+   ->add(new AuthenticationMiddleware($this))
+   ->add(new \Sso\Middleware\SessionCheckMiddleware())
+   ```
+
+7. **Menu.** Link to `/sso/settings` (`['plugin' => 'Sso', 'controller' => 'Settings',
+   'action' => 'index']`). The page's controller extends the application's own
+   `App\Controller\AppController`, so it renders in the application's layout with its menu
+   and signed-in user.
+
+8. **Look.** Override `templates/plugin/Sso/Sso/index.php` (sign-in page) or
+   `templates/plugin/Sso/Settings/index.php` (Bootstrap 5 markup by default) to restyle
+   them. Texts use the `sso` domain; Finnish ships with the plugin.
+
+9. **Events.** Listen where the application keeps its own side effects:
 
    | Event | Data | Typical use |
    |---|---|---|
    | `Sso.beforeUserSave` | `user`, `claims`, `isNew` | Fill columns the plugin does not know |
-   | `Sso.afterLogin` | `user`, `claims`, `method` | Last login, audit log, session freshness |
+   | `Sso.afterLogin` | `user`, `claims`, `method` | Audit log |
    | `Sso.beforeLogout` | `user` | Audit log |
    | `Sso.backchannelLogout` | `user` | Audit log |
 
-7. **Own second factor.** An application with one skips it when
+10. **Own second factor.** An application with one skips it when
    `\Sso\Session\SsoSession::isSsoSession($session)` is true: the provider already
    required a second factor.
 
-8. **Sign-in button.** Link to `/sso/login` from the login page.
 
 ## Connecting to the provider
 
