@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Sso\Service;
 
 use Cake\Database\Connection;
+use Cake\Database\Schema\Collection;
 use Cake\I18n\DateTime;
 
 /**
@@ -21,7 +22,10 @@ final class LegacyIdentities
      */
     public static function copy(Connection $connection, string $usersTable): int
     {
-        $schema = $connection->getSchemaCollection();
+        // Uncached: the application's next migration may drop these very
+        // columns, and a cached description would outlive them (a year with
+        // debug off), so the ORM would go on selecting columns that are gone.
+        $schema = new Collection($connection);
         if (!in_array($usersTable, $schema->listTables(), true)) {
             return 0;
         }

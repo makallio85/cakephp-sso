@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Sso\Test\TestCase\Service;
 
+use Cake\Cache\Cache;
 use Cake\Datasource\ConnectionManager;
 use Cake\I18n\DateTime;
 use Cake\TestSuite\TestCase;
@@ -41,6 +42,22 @@ class LegacyIdentitiesTest extends TestCase
         $this->assertSame($linked->id, $identity->user_id);
         $this->assertSame('2026-10-01 12:00:00', $identity->sessions_valid_from?->format('Y-m-d H:i:s'));
         $this->assertSame('2026-10-02 08:30:00', $identity->last_login_at?->format('Y-m-d H:i:s'));
+    }
+
+    public function testLeavesNoCachedDescriptionBehind(): void
+    {
+        /** @var \Cake\Database\Connection $connection */
+        $connection = ConnectionManager::get('test');
+        $connection->cacheMetadata('_sso_test_metadata_');
+        Cache::setConfig('_sso_test_metadata_', ['className' => 'Array']);
+        try {
+            LegacyIdentities::copy($connection, 'legacy_users');
+
+            $this->assertNull(Cache::read($connection->configName() . '_legacy_users', '_sso_test_metadata_'));
+        } finally {
+            $connection->cacheMetadata(false);
+            Cache::drop('_sso_test_metadata_');
+        }
     }
 
     public function testTableWithoutLinksCopiesNothing(): void
