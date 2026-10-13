@@ -1,0 +1,125 @@
+# Finnish translations for makallio85/cakephp-sso.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: fi\n"
+
+msgid "Client ID"
+msgstr "Asiakastunnus (Client ID)"
+
+msgid "Client secret"
+msgstr "Asiakassalaisuus (Client secret)"
+
+msgid "Connected."
+msgstr "Yhteys toimii."
+
+msgid "Emergency sign-in"
+msgstr "Hätäkirjautuminen"
+
+msgid "Enter the client ID."
+msgstr "Anna asiakastunnus."
+
+msgid "Enter the client secret: none is stored yet."
+msgstr "Anna asiakassalaisuus: sitä ei ole vielä tallennettu."
+
+msgid "Identity provider"
+msgstr "Tunnistuspalvelu"
+
+msgid "Identity server address"
+msgstr "Tunnistuspalvelun osoite"
+
+msgid "Last changed by {0}, {1}."
+msgstr "Viimeksi muuttanut {0}, {1}."
+
+msgid "Not configured yet. Enter the connection below; it is saved once the server answers."
+msgstr "Ei vielä määritetty. Anna yhteystiedot alla; ne tallennetaan, kun palvelin vastaa."
+
+msgid "Not saved. {0} The previous settings are still in use."
+msgstr "Ei tallennettu. {0} Aiemmat asetukset ovat yhä käytössä."
+
+msgid "People sign in only through Rock Software ID. These settings say which server and which client."
+msgstr "Kirjautuminen tapahtuu vain Rock Software ID:llä. Nämä asetukset kertovat, mikä palvelin ja mikä asiakas."
+
+msgid "Redirect URI to register at the provider"
+msgstr "Paluuosoite, joka rekisteröidään tunnistuspalveluun"
+
+msgid "Required"
+msgstr "Pakollinen"
+
+msgid "Required group"
+msgstr "Pääsyn antava ryhmä"
+
+msgid "Save"
+msgstr "Tallenna"
+
+msgid "Save checks the server first. Settings that cannot reach it are not saved, so nobody is locked out."
+msgstr "Tallennus tarkistaa ensin palvelimen. Asetuksia, joilla palvelinta ei tavoiteta, ei tallenneta, joten kukaan ei jää ulos."
+
+msgid "Saved. Sign-in now uses this identity server."
+msgstr "Tallennettu. Kirjautuminen käyttää nyt tätä tunnistuspalvelua."
+
+msgid "Sign in"
+msgstr "Kirjaudu"
+
+msgid "Sign in with Rock Software ID"
+msgstr "Kirjaudu Rock Software ID:llä"
+
+msgid "Sign-in is not configured yet. Connect this deployment to Rock Software ID with {0} in the application container."
+msgstr "Kirjautumista ei ole vielä määritetty. Yhdistä tämä asennus Rock Software ID:hen komennolla {0} sovelluksen kontissa."
+
+msgid "Sign-in through Rock Software ID failed. Try again, or contact the administrator."
+msgstr "Kirjautuminen Rock Software ID:llä epäonnistui. Yritä uudelleen tai ota yhteyttä pääkäyttäjään."
+
+msgid "Sign-in through Rock Software ID is not available."
+msgstr "Kirjautuminen Rock Software ID:llä ei ole käytettävissä."
+
+msgid "Stored encrypted and never shown. In Authentik: Applications › Providers › the provider › Edit."
+msgstr "Tallennetaan salattuna eikä näytetä koskaan. Authentikissa: Applications › Providers › palveluntarjoaja › Edit."
+
+msgid "Stored — leave blank to keep it"
+msgstr "Tallennettu — jätä tyhjäksi, niin se säilyy"
+
+msgid "Test connection"
+msgstr "Testaa yhteys"
+
+msgid "The identity server address must be an https URL."
+msgstr "Tunnistuspalvelun osoitteen pitää olla https-osoite."
+
+msgid "The identity server answered. Nothing was saved."
+msgstr "Tunnistuspalvelu vastasi. Mitään ei tallennettu."
+
+msgid "The identity server could not be asked: {0}"
+msgstr "Tunnistuspalvelulta ei voitu kysyä: {0}"
+
+msgid "The identity server did not answer: {0}"
+msgstr "Tunnistuspalvelu ei vastannut: {0}"
+
+msgid "The issuer URL: https://id.rocksoftware.fi/application/o/ followed by the application's slug."
+msgstr "Issuer-osoite: https://id.rocksoftware.fi/application/o/ ja perään sovelluksen tunnus (slug)."
+
+msgid "The server answers its discovery document."
+msgstr "Palvelin vastaa discovery-kyselyyn."
+
+msgid "The stored server does not answer."
+msgstr "Tallennettu palvelin ei vastaa."
+
+msgid "This address did not answer as an identity server. Check that the path ends in the application's slug."
+msgstr "Osoite ei vastannut tunnistuspalveluna. Tarkista, että polku päättyy sovelluksen tunnukseen."
+
+msgid "This link signs you in once, without Rock Software ID. Use it only when Rock Software ID is unavailable."
+msgstr "Tällä linkillä kirjaudut kerran ilman Rock Software ID:tä. Käytä sitä vain, kun Rock Software ID ei ole käytettävissä."
+
+msgid "This sign-in link is invalid, expired or already used."
+msgstr "Kirjautumislinkki on virheellinen, vanhentunut tai jo käytetty."
+
+msgid "You may not change the identity provider settings."
+msgstr "Sinulla ei ole oikeutta muuttaa tunnistuspalvelun asetuksia."
+
+msgid "Your account has no access to this application."
+msgstr "Tunnuksellasi ei ole pääsyä tähän sovellukseen."
+
+msgid "Your session has ended. Please sign in again."
+msgstr "Istuntosi on päättynyt. Kirjaudu uudelleen."
+
+msgid "a removed user"
+msgstr "poistettu käyttäjä"

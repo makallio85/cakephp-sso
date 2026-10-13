@@ -14,6 +14,7 @@ use Cake\Http\MiddlewareQueue;
 use Cake\Routing\Middleware\RoutingMiddleware;
 use Cake\Routing\RouteBuilder;
 use Psr\Http\Message\ServerRequestInterface;
+use Sso\Middleware\SessionCheckMiddleware;
 use Sso\SsoPlugin;
 
 /**
@@ -44,7 +45,8 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             ->add(new RoutingMiddleware($this))
             ->add(new BodyParserMiddleware())
             ->add($csrf)
-            ->add(new AuthenticationMiddleware($this));
+            ->add(new AuthenticationMiddleware($this))
+            ->add(new SessionCheckMiddleware());
     }
 
     /**

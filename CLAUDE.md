@@ -21,13 +21,16 @@ composer cs-check
    `SsoController::safeRedirect()` each have tests that prove a forged or replayed
    response is refused. Never weaken a check to make a test pass; add a test for every
    new rejection path.
-3. **No application knowledge.** The plugin establishes identity only. Roles,
-   permissions, audit logging and an application's own second factor stay in the
-   application, reached through the events listed in the README.
-4. **Configuration**: the provider connection lives in `sso_settings` (secret encrypted
+3. **No application knowledge.** The plugin establishes identity and provides the pieces
+   every application needs around it (sign-in page, session check, last login, the
+   settings page). Roles, permissions, audit logging and an application's own second
+   factor stay in the application, reached through the events and `Sso.settingsAccess`.
+4. **Texts are translatable.** Every user-facing string goes through `__d('sso', …)` and
+   has a Finnish entry in `resources/locales/fi/sso.po` in the same change.
+5. **Configuration**: the provider connection lives in `sso_settings` (secret encrypted
    by `SecretCipher`); application shape lives in `Configure::read('Sso')`. Nothing in
    environment variables.
-5. **Tests** run on SQLite against `tests/TestCase/FakeProvider.php`. Fixtures hold a
+6. **Tests** run on SQLite against `tests/TestCase/FakeProvider.php`. Fixtures hold a
    fresh installation's rows only; `identity_source_types` rows come from the
    migration, and each test creates the users it needs.
-6. Do not commit `vendor/`, `composer.lock`, `tmp/` or `.phpunit.cache/`.
+7. Do not commit `vendor/`, `composer.lock`, `tmp/` or `.phpunit.cache/`.

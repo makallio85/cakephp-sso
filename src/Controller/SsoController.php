@@ -41,8 +41,6 @@ class SsoController extends Controller
     public const EVENT_BEFORE_LOGOUT = 'Sso.beforeLogout';
     public const EVENT_BACKCHANNEL_LOGOUT = 'Sso.backchannelLogout';
 
-    private const FAILURE_MESSAGE = 'Sign-in through Rock Software ID failed. Try again, or contact the administrator.';
-
     /**
      * @return void
      */
@@ -52,12 +50,43 @@ class SsoController extends Controller
 
         $this->loadComponent('Flash');
         $this->loadComponent('Authentication.Authentication');
-        $this->Authentication->allowUnauthenticated(['login', 'callback', 'logout', 'backchannelLogout', 'emergency']);
+        $this->Authentication->allowUnauthenticated(
+            ['index', 'login', 'callback', 'logout', 'backchannelLogout', 'emergency'],
+        );
 
         $layout = Configure::read('Sso.layout');
         if (is_string($layout)) {
             $this->viewBuilder()->setLayout($layout);
         }
+    }
+
+    /**
+     * The sign-in page: one button, "Sign in with Rock Software ID". Failed and
+     * refused sign-ins, and signing out, come back here with their reason as a
+     * flash message. An application gives it its look by overriding
+     * `templates/plugin/Sso/Sso/index.php`.
+     *
+     * @return \Cake\Http\Response|null
+     */
+    public function index(): ?Response
+    {
+        if ($this->Authentication->getIdentity() !== null) {
+            return $this->redirect(Configure::read('Sso.loginRedirect', '/'));
+        }
+
+        $redirect = $this->safeRedirect($this->getRequest()->getQuery('redirect'));
+        $this->set([
+            'ssoEnabled' => $this->fetchTable('Sso.SsoSettings')->enabled() !== null,
+            'signInUrl' => [
+                'plugin' => 'Sso',
+                'controller' => 'Sso',
+                'action' => 'login',
+                'prefix' => false,
+                '?' => array_filter(['redirect' => $redirect]),
+            ],
+        ]);
+
+        return null;
     }
 
     /**
@@ -69,7 +98,7 @@ class SsoController extends Controller
     {
         $setting = $this->fetchTable('Sso.SsoSettings')->enabled();
         if ($setting === null) {
-            $this->Flash->error('Sign-in through Rock Software ID is not available.');
+            $this->Flash->error(__d('sso', 'Sign-in through Rock Software ID is not available.'));
 
             return $this->redirect($this->loginUrl());
         }
@@ -130,12 +159,14 @@ class SsoController extends Controller
 
             $group = $setting->required_group;
             if ($group !== null && $group !== '' && !in_array($group, (array)($claims['groups'] ?? []), true)) {
+                // The groups the token did carry, so a misspelt group name shows.
                 Log::warning(sprintf(
-                    'SSO sign-in refused: %s is not in group %s.',
+                    'SSO sign-in refused: %s is not in group %s (token groups: %s).',
                     $claims['email'] ?? $claims['sub'],
                     $group,
+                    json_encode(array_values((array)($claims['groups'] ?? []))),
                 ));
-                $this->Flash->error('Your account has no access to this application.');
+                $this->Flash->error(__d('sso', 'Your account has no access to this application.'));
 
                 return $this->redirect($this->loginUrl());
             }
@@ -241,7 +272,7 @@ class SsoController extends Controller
         $logins = $this->fetchTable('Sso.SsoEmergencyLogins');
         $login = $logins->findUsable($token);
         if ($login === null) {
-            $this->Flash->error('This sign-in link is invalid, expired or already used.');
+            $this->Flash->error(__d('sso', 'This sign-in link is invalid, expired or already used.'));
 
             return $this->redirect($this->loginUrl());
         }
@@ -258,7 +289,7 @@ class SsoController extends Controller
             || ($activeField !== null && !$user->get($activeField))
             || !$logins->consume($login)
         ) {
-            $this->Flash->error('This sign-in link is invalid, expired or already used.');
+            $this->Flash->error(__d('sso', 'This sign-in link is invalid, expired or already used.'));
 
             return $this->redirect($this->loginUrl());
         }
@@ -286,7 +317,14 @@ class SsoController extends Controller
             SsoSession::AUTHENTICATED => true,
             SsoSession::METHOD => $method,
             SsoSession::ID_TOKEN => $idToken,
+            SsoSession::ESTABLISHED_AT => time(),
         ]);
+
+        $lastLoginField = Configure::read('Sso.lastLoginField');
+        if (is_string($lastLoginField) && $lastLoginField !== '') {
+            $user->set($lastLoginField, DateTime::now(), ['guard' => false]);
+            (new UserProvisioner())->users()->saveOrFail($user, ['validate' => false]);
+        }
 
         $this->notify(self::EVENT_AFTER_LOGIN, [
             'user' => $user,
@@ -311,7 +349,9 @@ class SsoController extends Controller
     private function fail(SsoException $e): ?Response
     {
         Log::error('SSO sign-in failed: ' . $e->getMessage());
-        $this->Flash->error(self::FAILURE_MESSAGE);
+        $this->Flash->error(
+            __d('sso', 'Sign-in through Rock Software ID failed. Try again, or contact the administrator.'),
+        );
 
         return $this->redirect($this->loginUrl());
     }
