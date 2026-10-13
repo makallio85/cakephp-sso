@@ -38,6 +38,7 @@ class SsoPlugin extends BasePlugin
     public function routes(RouteBuilder $routes): void
     {
         $routes->plugin('Sso', ['path' => '/sso'], function (RouteBuilder $builder): void {
+            $builder->connect('/', ['controller' => 'Sso', 'action' => 'index']);
             $builder->connect('/login', ['controller' => 'Sso', 'action' => 'login']);
             $builder->connect('/callback', ['controller' => 'Sso', 'action' => 'callback']);
             $builder->connect('/logout', ['controller' => 'Sso', 'action' => 'logout']);
@@ -45,6 +46,9 @@ class SsoPlugin extends BasePlugin
             $builder->connect('/emergency/{token}', ['controller' => 'Sso', 'action' => 'emergency'])
                 ->setPass(['token'])
                 ->setPatterns(['token' => '[0-9a-f]{64}']);
+            $builder->connect('/settings', ['controller' => 'Settings', 'action' => 'index']);
+            $builder->connect('/settings/update', ['controller' => 'Settings', 'action' => 'update']);
+            $builder->connect('/settings/test', ['controller' => 'Settings', 'action' => 'test']);
         });
     }
 

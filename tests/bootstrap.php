@@ -25,6 +25,9 @@ define('CONFIG', ROOT . DS . 'config' . DS);
 define('CORE_PATH', dirname(__DIR__) . DS . 'vendor' . DS . 'cakephp' . DS . 'cakephp' . DS);
 define('CAKE', CORE_PATH . 'src' . DS);
 
+// The global helpers (__d() and friends) an application's bootstrap loads.
+require CAKE . 'functions.php';
+
 foreach ([LOGS, CACHE] as $dir) {
     if (!is_dir($dir)) {
         mkdir($dir, 0777, true);

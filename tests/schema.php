@@ -18,6 +18,7 @@ return [
             'identity_source_id' => ['type' => 'integer', 'null' => false],
             'synced_at' => ['type' => 'datetime', 'null' => true],
             'sessions_valid_from' => ['type' => 'datetime', 'null' => true],
+            'last_login_at' => ['type' => 'datetime', 'null' => true],
             'created' => ['type' => 'datetime', 'null' => false],
             'modified' => ['type' => 'datetime', 'null' => false],
         ],
