@@ -28,7 +28,7 @@ final class SsoSession
 
     /**
      * When this session was established (Unix time). The session check compares
-     * it with the user's `sessionsValidFromField` to end sessions a back-channel
+     * it with the identity's `sessions_valid_from` to end sessions a back-channel
      * logout invalidated.
      */
     public const ESTABLISHED_AT = 'Sso.establishedAt';

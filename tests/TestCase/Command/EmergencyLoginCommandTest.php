@@ -5,7 +5,6 @@ namespace Sso\Test\TestCase\Command;
 
 use Cake\Console\TestSuite\ConsoleIntegrationTestTrait;
 use Cake\TestSuite\TestCase;
-use Sso\Model\Entity\IdentitySourceType;
 
 class EmergencyLoginCommandTest extends TestCase
 {
@@ -24,7 +23,6 @@ class EmergencyLoginCommandTest extends TestCase
             'password' => 'hashed',
             'name' => 'Admin',
             'is_active' => true,
-            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::LOCAL),
         ], ['accessibleFields' => ['*' => true]]));
 
         $this->exec('sso emergency_login admin@example.test');

@@ -51,10 +51,11 @@ Configure::write('App', [
         'locales' => [ROOT . DS . 'resources' . DS . 'locales' . DS],
     ],
 ]);
+// The few lines an application writes; everything else is a default.
 Configure::write('Sso', [
-    'loginUrl' => '/users/login',
+    'appName' => 'Test App',
     'loginRedirect' => '/dashboard',
-    'sessionsValidFromField' => 'sessions_valid_from',
+    'publicPaths' => ['/health'],
 ]);
 Security::setSalt('cakephp-sso-test-salt-0123456789abcdef0123456789abcdef');
 
@@ -84,4 +85,5 @@ Cache::setConfig([
 // gives the tests the schema an application actually gets.
 (new SchemaLoader())->loadInternalFile(__DIR__ . DS . 'schema.php', 'test');
 Plugin::getCollection()->add(new SsoPlugin(['path' => dirname(__DIR__) . DS]));
+SsoPlugin::applyDefaults();
 (new Migrations(['connection' => 'test', 'plugin' => 'Sso']))->migrate();

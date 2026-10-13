@@ -20,7 +20,8 @@ use Sso\Service\UserProvisioner;
  *   POST /sso/settings/test     — test the values in the form, save nothing
  *
  * Who may open it is the application's decision: `Sso.settingsAccess`, a
- * callable receiving the identity and the request. Without one, nobody may.
+ * callable receiving the identity and the request. Without one, any signed-in
+ * user may, since signing in already required the application's group.
  *
  * @property \Authentication\Controller\Component\AuthenticationComponent $Authentication
  * @property \Cake\Controller\Component\FlashComponent $Flash
@@ -54,8 +55,13 @@ class SettingsController extends SettingsBaseController
         }
 
         $identity = $this->Authentication->getIdentity();
+        if ($identity === null) {
+            // The Authentication component sends the anonymous request to sign in.
+            return;
+        }
         $access = Configure::read('Sso.settingsAccess');
-        if ($identity !== null && (!is_callable($access) || $access($identity, $this->getRequest()) !== true)) {
+        $allowed = $access === null || (is_callable($access) && $access($identity, $this->getRequest()) === true);
+        if (!$allowed) {
             throw new ForbiddenException(__d('sso', 'You may not change the identity provider settings.'));
         }
     }
@@ -157,7 +163,10 @@ class SettingsController extends SettingsBaseController
         if ($latest !== null) {
             $provisioner = new UserProvisioner();
             $user = $provisioner->users()->find()->where(['id' => $latest->user_id])->first();
-            $nameField = UserProvisioner::fields()['name'] ?? UserProvisioner::fields()['email'];
+            $nameField = UserProvisioner::fields()['name'];
+            if ($nameField === null || !$provisioner->users()->getSchema()->hasColumn($nameField)) {
+                $nameField = UserProvisioner::fields()['email'];
+            }
             $changedBy = $user instanceof EntityInterface ? (string)$user->get($nameField) : null;
         }
 

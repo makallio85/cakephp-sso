@@ -23,7 +23,11 @@ composer cs-check
    new rejection path.
 3. **No application knowledge.** The plugin establishes identity and provides the pieces
    every application needs around it (sign-in page, session check, last login, the
-   settings page). Roles, permissions, audit logging and an application's own second
+   settings page). Installing stays three steps (require, `addPlugin`, migrate): the
+   plugin wires its own middleware in `SsoPlugin::middleware()`, every setting has a
+   default in `SsoPlugin::DEFAULTS`, and its data lives in its own tables
+   (`sso_identities`), never in columns it asks an application to add. Only `email` on
+   `users` is assumed; other columns are written when present. Roles, permissions, audit logging and an application's own second
    factor stay in the application, reached through the events and `Sso.settingsAccess`.
 4. **Texts are translatable.** Every user-facing string goes through `__d('sso', …)` and
    has a Finnish entry in `resources/locales/fi/sso.po` in the same change.
@@ -32,5 +36,6 @@ composer cs-check
    environment variables.
 6. **Tests** run on SQLite against `tests/TestCase/FakeProvider.php`. Fixtures hold a
    fresh installation's rows only; `identity_source_types` rows come from the
-   migration, and each test creates the users it needs.
+   migration, and each test creates the users it needs. The test application has no
+   sign-in wiring of its own, which is what proves the plugin needs none.
 7. Do not commit `vendor/`, `composer.lock`, `tmp/` or `.phpunit.cache/`.

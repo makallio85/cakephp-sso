@@ -14,6 +14,7 @@ use Cake\Log\Log;
 use Cake\ORM\Exception\PersistenceFailedException;
 use Cake\Routing\Router;
 use Sso\Model\Entity\SsoSetting;
+use Sso\Service\BackchannelLogout;
 use Sso\Service\OidcClient;
 use Sso\Service\SsoException;
 use Sso\Service\UserProvisioner;
@@ -39,7 +40,7 @@ class SsoController extends Controller
 {
     public const EVENT_AFTER_LOGIN = 'Sso.afterLogin';
     public const EVENT_BEFORE_LOGOUT = 'Sso.beforeLogout';
-    public const EVENT_BACKCHANNEL_LOGOUT = 'Sso.backchannelLogout';
+    public const EVENT_BACKCHANNEL_LOGOUT = BackchannelLogout::EVENT;
 
     /**
      * @return void
@@ -71,7 +72,7 @@ class SsoController extends Controller
     public function index(): ?Response
     {
         if ($this->Authentication->getIdentity() !== null) {
-            return $this->redirect(Configure::read('Sso.loginRedirect', '/'));
+            return $this->redirect(Configure::read('Sso.loginRedirect'));
         }
 
         $redirect = $this->safeRedirect($this->getRequest()->getQuery('redirect'));
@@ -186,7 +187,7 @@ class SsoController extends Controller
 
         $this->signIn($user, SsoSession::METHOD_OIDC, $claims, (string)$tokens['id_token']);
 
-        return $this->redirect($flow['redirect'] ?? Configure::read('Sso.loginRedirect', '/'));
+        return $this->redirect($flow['redirect'] ?? Configure::read('Sso.loginRedirect'));
     }
 
     /**
@@ -229,35 +230,13 @@ class SsoController extends Controller
      */
     public function backchannelLogout(): Response
     {
+        // 1.2 answers this before the CSRF middleware
+        // (BackchannelLogoutMiddleware); this action serves a 1.1 application
+        // that exempts the path itself.
         $this->getRequest()->allowMethod(['post']);
-        $response = $this->getResponse()->withHeader('Cache-Control', 'no-store');
+        $status = (new BackchannelLogout())->handle($this->getRequest()->getData('logout_token'));
 
-        $setting = $this->fetchTable('Sso.SsoSettings')->enabled();
-        $token = $this->getRequest()->getData('logout_token');
-        if ($setting === null || !is_string($token)) {
-            return $response->withStatus(400);
-        }
-
-        try {
-            $claims = $this->client($setting)->validateLogoutToken($token);
-        } catch (SsoException $e) {
-            Log::warning('SSO back-channel logout rejected: ' . $e->getMessage());
-
-            return $response->withStatus(400);
-        }
-
-        $provisioner = new UserProvisioner();
-        $user = is_string($claims['sub'] ?? null) ? $provisioner->findBySubject($claims['sub']) : null;
-        if ($user !== null) {
-            $field = Configure::read('Sso.sessionsValidFromField');
-            if (is_string($field)) {
-                $user->set($field, DateTime::now(), ['guard' => false]);
-                $provisioner->users()->saveOrFail($user);
-            }
-            $this->notify(self::EVENT_BACKCHANNEL_LOGOUT, ['user' => $user]);
-        }
-
-        return $response->withStatus(200);
+        return $this->getResponse()->withHeader('Cache-Control', 'no-store')->withStatus($status);
     }
 
     /**
@@ -286,7 +265,11 @@ class SsoController extends Controller
         $activeField = UserProvisioner::fields()['is_active'];
         if (
             !$user instanceof EntityInterface
-            || ($activeField !== null && !$user->get($activeField))
+            || (
+                $activeField !== null
+                && $provisioner->users()->getSchema()->hasColumn($activeField)
+                && !$user->get($activeField)
+            )
             || !$logins->consume($login)
         ) {
             $this->Flash->error(__d('sso', 'This sign-in link is invalid, expired or already used.'));
@@ -297,7 +280,7 @@ class SsoController extends Controller
         Log::warning(sprintf('SSO emergency sign-in used for user %d.', $login->user_id));
         $this->signIn($user, SsoSession::METHOD_EMERGENCY, [], null);
 
-        return $this->redirect(Configure::read('Sso.loginRedirect', '/'));
+        return $this->redirect(Configure::read('Sso.loginRedirect'));
     }
 
     /**
@@ -320,10 +303,17 @@ class SsoController extends Controller
             SsoSession::ESTABLISHED_AT => time(),
         ]);
 
+        $provisioner = new UserProvisioner();
+        $identity = $provisioner->identities()->findForUser((int)$user->get('id'));
+        if ($identity !== null) {
+            $identity->last_login_at = DateTime::now();
+            $provisioner->identities()->saveOrFail($identity);
+        }
+        // A 1.1 application may still read its own column.
         $lastLoginField = Configure::read('Sso.lastLoginField');
-        if (is_string($lastLoginField) && $lastLoginField !== '') {
+        if (is_string($lastLoginField) && $provisioner->users()->getSchema()->hasColumn($lastLoginField)) {
             $user->set($lastLoginField, DateTime::now(), ['guard' => false]);
-            (new UserProvisioner())->users()->saveOrFail($user, ['validate' => false]);
+            $provisioner->users()->saveOrFail($user, ['validate' => false]);
         }
 
         $this->notify(self::EVENT_AFTER_LOGIN, [
@@ -370,7 +360,7 @@ class SsoController extends Controller
     private function loginUrl(): array|string
     {
         /** @var array<string, mixed>|string */
-        return Configure::read('Sso.loginUrl', '/users/login');
+        return Configure::read('Sso.loginUrl');
     }
 
     /**
