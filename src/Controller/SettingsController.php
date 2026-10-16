@@ -5,13 +5,16 @@ namespace Sso\Controller;
 
 use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
+use Cake\Event\Event;
 use Cake\Event\EventInterface;
+use Cake\Event\EventManager;
 use Cake\Http\Exception\ForbiddenException;
 use Cake\Http\Response;
 use Cake\Routing\Router;
 use Sso\Service\ConnectionManager;
 use Sso\Service\Provisioning;
 use Sso\Service\UserProvisioner;
+use Sso\Session\SsoSession;
 
 /**
  * Settings › Identity provider: the connection to the identity provider.
@@ -21,6 +24,8 @@ use Sso\Service\UserProvisioner;
  *   POST /sso/settings/test     — test the values in the form, save nothing
  *   POST /sso/settings/allow-provisioning — let Rock Software ID connect the
  *                                 application again for an hour
+ *   POST /sso/settings/password-sign-in — turn the application's own password
+ *                                 sign-in off or on (`Sso.passwordSignIn`)
  *
  * Who may open it is the application's decision: `Sso.settingsAccess`, a
  * callable receiving the identity and the request. Without one, any signed-in
@@ -32,6 +37,8 @@ use Sso\Service\UserProvisioner;
 class SettingsController extends SettingsBaseController
 {
     public const PROVISIONING_WINDOW_MINUTES = 60;
+
+    public const EVENT_PASSWORD_SIGN_IN_CHANGED = 'Sso.passwordSignInChanged';
 
     /**
      * @return void
@@ -166,6 +173,103 @@ class SettingsController extends SettingsBaseController
     }
 
     /**
+     * Turns the application's own password sign-in off or on. Off only from a
+     * session signed in through the identity provider (not an emergency
+     * link), with the connection answering: whoever turns the password form
+     * off has just proved the other way in works.
+     *
+     * @return \Cake\Http\Response|null
+     */
+    public function passwordSignIn(): ?Response
+    {
+        if (!$this->getRequest()->is('post') || Configure::read('Sso.passwordSignIn') !== true) {
+            return $this->redirect(['action' => 'index']);
+        }
+        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        $current = $settings->enabled();
+        if ($current === null) {
+            return $this->redirect(['action' => 'index']);
+        }
+        $enable = (string)$this->getRequest()->getData('enabled') === '1';
+        if (!$enable && !$this->canTurnPasswordSignInOff()) {
+            $this->Flash->error(__d(
+                'sso',
+                'Password sign-in stays on. Sign in through Rock Software ID first, so nobody can lock themselves out.',
+            ));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        if (!$enable) {
+            $problem = (new ConnectionManager())->check([
+                'issuer_url' => $current->issuer_url,
+                'client_id' => $current->client_id,
+            ]);
+            if ($problem !== null) {
+                $this->Flash->error(
+                    __d('sso', 'Password sign-in stays on: the identity server does not answer. {0}', $problem),
+                );
+
+                return $this->redirect(['action' => 'index']);
+            }
+        }
+
+        $identity = $this->Authentication->getIdentity();
+        $userId = (int)$identity?->getIdentifier();
+        $settings->getConnection()->transactional(function () use ($settings, $enable, $userId): void {
+            $settings->setPasswordSignIn($enable, $userId);
+            /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
+            $changes = $this->fetchTable('Sso.SsoSettingChanges');
+            $changes->saveOrFail($changes->newEntity(['user_id' => $userId]));
+        });
+        EventManager::instance()->dispatch(new Event(self::EVENT_PASSWORD_SIGN_IN_CHANGED, $this, [
+            'user' => $identity?->getOriginalData(),
+            'enabled' => $enable,
+        ]));
+        $this->Flash->success($enable
+            ? __d('sso', 'Password sign-in is on. People can sign in with their password again.')
+            : __d('sso', 'Password sign-in is off. Only Rock Software ID signs people in.'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /**
+     * A user's name (else email) for "changed by" lines, or null when the
+     * user is gone or unknown.
+     *
+     * @param int|null $userId The user.
+     * @return string|null
+     */
+    private function userName(?int $userId): ?string
+    {
+        if ($userId === null) {
+            return null;
+        }
+        $provisioner = new UserProvisioner();
+        $user = $provisioner->users()->find()->where(['id' => $userId])->first();
+        $nameField = UserProvisioner::fields()['name'];
+        if ($nameField === null || !$provisioner->users()->getSchema()->hasColumn($nameField)) {
+            $nameField = UserProvisioner::fields()['email'];
+        }
+
+        return $user instanceof EntityInterface ? (string)$user->get($nameField) : null;
+    }
+
+    /**
+     * Whether this session may turn password sign-in off: one signed in
+     * through the identity provider itself.
+     *
+     * @return bool
+     */
+    private function canTurnPasswordSignInOff(): bool
+    {
+        $session = $this->getRequest()->getSession();
+
+        return SsoSession::isSsoSession($session)
+            && $session->read(SsoSession::METHOD) === SsoSession::METHOD_OIDC;
+    }
+
+    /**
      * @return array<string, string>
      */
     private function submitted(): array
@@ -193,16 +297,7 @@ class SettingsController extends SettingsBaseController
         $changes = $this->fetchTable('Sso.SsoSettingChanges');
         $latest = $changes->latest();
 
-        $changedBy = null;
-        if ($latest !== null) {
-            $provisioner = new UserProvisioner();
-            $user = $provisioner->users()->find()->where(['id' => $latest->user_id])->first();
-            $nameField = UserProvisioner::fields()['name'];
-            if ($nameField === null || !$provisioner->users()->getSchema()->hasColumn($nameField)) {
-                $nameField = UserProvisioner::fields()['email'];
-            }
-            $changedBy = $user instanceof EntityInterface ? (string)$user->get($nameField) : null;
-        }
+        $changedBy = $latest === null ? null : $this->userName($latest->user_id);
 
         $this->set([
             'values' => $values,
@@ -218,6 +313,14 @@ class SettingsController extends SettingsBaseController
             'lastProvisioning' => $this->fetchTable('Sso.SsoProvisionings')->latest(),
             'provisioningEnabled' => Provisioning::config() !== null,
             'provisioningOpenUntil' => (new ConnectionManager())->current()?->provisioning_open_until,
+            'passwordSignInOffered' => Configure::read('Sso.passwordSignIn') === true
+                && (new ConnectionManager())->current()?->is_enabled === true,
+            'passwordSignInEnabled' => $this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed(),
+            'canTurnPasswordSignInOff' => $this->canTurnPasswordSignInOff(),
+            'passwordSignInChangedBy' => $this->userName(
+                (new ConnectionManager())->current()?->password_sign_in_changed_by,
+            ),
+            'passwordSignInChangedAt' => (new ConnectionManager())->current()?->password_sign_in_changed_at,
         ]);
         $this->render('index');
     }

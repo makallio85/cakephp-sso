@@ -101,6 +101,40 @@ class SsoSettingsTable extends Table
     }
 
     /**
+     * Whether the application's own password form may sign people in. Always
+     * true before the first connection: until Rock Software ID signs people
+     * in, the password form is the only way in.
+     *
+     * @return bool
+     */
+    public function passwordSignInAllowed(): bool
+    {
+        $setting = $this->current();
+
+        return $setting === null || $setting->password_sign_in_enabled;
+    }
+
+    /**
+     * Turns the application's own password sign-in on or off.
+     *
+     * @param bool $enabled On or off.
+     * @param int $userId Who changed it.
+     * @return \Sso\Model\Entity\SsoSetting
+     */
+    public function setPasswordSignIn(bool $enabled, int $userId): SsoSetting
+    {
+        $setting = $this->current();
+        if ($setting === null) {
+            throw new RecordNotFoundException('There is no connection yet; password sign-in stays on.');
+        }
+        $setting->password_sign_in_enabled = $enabled;
+        $setting->password_sign_in_changed_by = $userId;
+        $setting->password_sign_in_changed_at = DateTime::now();
+
+        return $this->saveOrFail($setting);
+    }
+
+    /**
      * Writes the one connection row, encrypting the client secret.
      *
      * @param array<string, mixed> $data issuer_url, client_id, client_secret (plain), required_group, is_enabled.

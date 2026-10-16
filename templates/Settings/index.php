@@ -14,6 +14,11 @@
  * @var \Sso\Model\Entity\SsoProvisioning|null $lastProvisioning
  * @var bool $provisioningEnabled
  * @var \Cake\I18n\DateTime|null $provisioningOpenUntil
+ * @var bool $passwordSignInOffered
+ * @var bool $passwordSignInEnabled
+ * @var bool $canTurnPasswordSignInOff
+ * @var string|null $passwordSignInChangedBy
+ * @var \Cake\I18n\DateTime|null $passwordSignInChangedAt
  */
 $this->assign('title', __d('sso', 'Identity provider'));
 ?>
@@ -131,6 +136,49 @@ $this->assign('title', __d('sso', 'Identity provider'));
                     ) ?>
                 </div>
             </div>
+        <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($passwordSignInOffered) : ?>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body p-3 p-md-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div style="flex: 1 1 420px">
+                    <div class="fw-semibold mb-1"><?= __d('sso', 'Password sign-in') ?></div>
+                    <div class="small text-body-secondary">
+                        <?php if (!$passwordSignInEnabled) : ?>
+                            <?= __d('sso', 'Off. Only Rock Software ID signs people in. Turning it back on lets everyone use their password again at once.') ?>
+                        <?php elseif ($canTurnPasswordSignInOff) : ?>
+                            <?= __d('sso', 'On. People can also sign in with this application\'s own email and password. Turn it off once everyone has signed in through Rock Software ID once.') ?>
+                        <?php else : ?>
+                            <?= __d('sso', 'On. To turn it off, sign in through Rock Software ID first, so nobody can lock themselves out.') ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php if ($passwordSignInEnabled) : ?>
+                    <?= $this->Form->postButton(
+                        __d('sso', 'Turn password sign-in off'),
+                        ['plugin' => 'Sso', 'controller' => 'Settings', 'action' => 'passwordSignIn'],
+                        [
+                            'data' => ['enabled' => '0'],
+                            'class' => 'btn btn-outline-danger',
+                            'disabled' => !$canTurnPasswordSignInOff,
+                        ],
+                    ) ?>
+                <?php else : ?>
+                    <?= $this->Form->postButton(
+                        __d('sso', 'Turn password sign-in on'),
+                        ['plugin' => 'Sso', 'controller' => 'Settings', 'action' => 'passwordSignIn'],
+                        ['data' => ['enabled' => '1'], 'class' => 'btn btn-outline-secondary'],
+                    ) ?>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php if ($passwordSignInChangedAt !== null) : ?>
+            <p class="small text-body-secondary mt-2 mb-0">
+                <?= h($passwordSignInEnabled
+                    ? __d('sso', 'Password sign-in turned on by {0}, {1}.', $passwordSignInChangedBy ?? __d('sso', 'a removed user'), $this->Time->format($passwordSignInChangedAt, 'd.M.yyyy HH.mm'))
+                    : __d('sso', 'Password sign-in turned off by {0}, {1}.', $passwordSignInChangedBy ?? __d('sso', 'a removed user'), $this->Time->format($passwordSignInChangedAt, 'd.M.yyyy HH.mm'))) ?>
+            </p>
         <?php endif; ?>
     <?php endif; ?>
 

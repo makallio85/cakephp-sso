@@ -74,6 +74,7 @@ secret.
 | `requireSignIn` | `'auto'` | Require sign-in everywhere when the plugin provides authentication; `true`/`false` force it |
 | `loginUrl` | `'/sso'` | The sign-in page |
 | `cacheConfig` | `'default'` | Cache for the provider's discovery document and keys |
+| `passwordSignIn` | `false` | `true` when the application has a password form of its own: `/sso/settings` then offers to turn it off and on (see below) |
 | `provisioning` | see below | `POST /sso/provision`; `false` switches it off |
 
 An application with its own `AuthenticationMiddleware` keeps it, and keeps deciding which
@@ -95,6 +96,7 @@ of its pages are public; point its `unauthenticatedRedirect` at `/sso`.
   | `Sso.beforeLogout` | `user` | Audit log |
   | `Sso.backchannelLogout` | `user` | Audit log |
   | `Sso.provisioned` | `issuer`, `clientId`, `requiredGroup` | Audit log; tell the administrators |
+  | `Sso.passwordSignInChanged` | `user`, `enabled` | Audit log |
 
 - **Own second factor.** Skip it when `\Sso\Session\SsoSession::isSsoSession($session)`
   is true: the provider already required a second factor.
@@ -146,6 +148,24 @@ bin/cake sso configure \
     --enable
 # the client secret is asked for interactively
 ```
+
+## Password sign-in beside the provider
+
+An application moving over from its own password form sets `passwordSignIn` to `true`.
+Settings › Identity provider then shows *Turn password sign-in off / on*. The plugin
+stores the switch (`sso_settings.password_sign_in_enabled`, with who changed it and when)
+and the application enforces it on its own form:
+
+```php
+if (!$this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed()) {
+    // hide the form, and refuse a password POST like a wrong password
+}
+```
+
+It is on until someone turns it off, and always on before the first connection. Turning
+it **off** needs a session signed in through the provider (not a password session, not an
+emergency link) and a connection that answers, so nobody locks themselves out; turning it
+**on** works from any session allowed on the page.
 
 ## Emergency sign-in
 
