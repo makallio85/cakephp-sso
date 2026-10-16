@@ -88,6 +88,10 @@ class SsoPlugin extends BasePlugin
      *   shows the email and password form, and the settings page a switch to
      *   turn it off and on. An application that still has a password form of
      *   its own reads the switch with `SsoSettingsTable::passwordSignInAllowed()`.
+     * - `passwordForm`: `plugin` shows the password form on the sign-in page;
+     *   `application` when the application keeps its own form (for one, with
+     *   its own second factor): the plugin then offers no form and accepts no
+     *   password, and only provides the switch.
      * - `provisioning`: `POST /sso/provision`, or `false` to switch it off.
      *   `issuerPrefix` is the trust anchor: only issuers directly under it are
      *   accepted, and nothing is fetched from anywhere else. `subject` is the
@@ -113,6 +117,7 @@ class SsoPlugin extends BasePlugin
         'lastLoginField' => null,
         'cacheConfig' => 'default',
         'passwordSignIn' => false,
+        'passwordForm' => 'plugin',
         'provisioning' => [
             'issuerPrefix' => 'https://id.rocksoftware.fi/application/o/',
             'subject' => 'onboarding',
