@@ -17,7 +17,9 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Sso\Command\ConfigureCommand;
 use Sso\Command\EmergencyLoginCommand;
+use Sso\Command\StatusCommand;
 use Sso\Middleware\BackchannelLogoutMiddleware;
+use Sso\Middleware\ClientMetadataMiddleware;
 use Sso\Middleware\ProvisionMiddleware;
 use Sso\Middleware\RequireSignInMiddleware;
 use Sso\Middleware\SessionCheckMiddleware;
@@ -37,6 +39,7 @@ use Sso\Service\AuthenticationServiceProvider;
  * - `GET|POST /sso/logout` — sign out here and at the provider
  * - `POST /sso/backchannel-logout` — the provider's back-channel logout URI
  * - `POST /sso/provision` — the provider hands the application its connection
+ * - `GET /sso/client-metadata` — the addresses the provider must register
  * - `GET|POST /sso/emergency/{token}` — single-use emergency sign-in
  * - `GET /sso/settings` (+ `POST update`, `POST test`, `POST allow-provisioning`,
  *   `POST password-sign-in`) —
@@ -47,6 +50,8 @@ class SsoPlugin extends BasePlugin
     public const BACKCHANNEL_LOGOUT_PATH = '/sso/backchannel-logout';
 
     public const PROVISION_PATH = '/sso/provision';
+
+    public const CLIENT_METADATA_PATH = '/sso/client-metadata';
 
     /**
      * Every setting and its default. An application overrides any of them in
@@ -150,7 +155,12 @@ class SsoPlugin extends BasePlugin
         // CSRF token; answering it before the CSRF middleware means the
         // application needs no exemption.
         // Provisioning is authorised by its bearer token in the same way.
-        foreach ([new BackchannelLogoutMiddleware(), new ProvisionMiddleware()] as $tokenEndpoint) {
+        $earlyEndpoints = [
+            new BackchannelLogoutMiddleware(),
+            new ProvisionMiddleware(),
+            new ClientMetadataMiddleware(),
+        ];
+        foreach ($earlyEndpoints as $tokenEndpoint) {
             if (self::queueHas($middlewareQueue, CsrfProtectionMiddleware::class)) {
                 $middlewareQueue->insertBefore(CsrfProtectionMiddleware::class, $tokenEndpoint);
             } else {
@@ -192,6 +202,7 @@ class SsoPlugin extends BasePlugin
             $builder->connect('/logout', ['controller' => 'Sso', 'action' => 'logout']);
             $builder->connect('/backchannel-logout', ['controller' => 'Sso', 'action' => 'backchannelLogout']);
             $builder->connect('/provision', ['controller' => 'Sso', 'action' => 'provision']);
+            $builder->connect('/client-metadata', ['controller' => 'Sso', 'action' => 'clientMetadata']);
             $builder->connect('/emergency/{token}', ['controller' => 'Sso', 'action' => 'emergency'])
                 ->setPass(['token'])
                 ->setPatterns(['token' => '[0-9a-f]{64}']);
@@ -217,7 +228,8 @@ class SsoPlugin extends BasePlugin
     {
         return $commands
             ->add(ConfigureCommand::defaultName(), ConfigureCommand::class)
-            ->add(EmergencyLoginCommand::defaultName(), EmergencyLoginCommand::class);
+            ->add(EmergencyLoginCommand::defaultName(), EmergencyLoginCommand::class)
+            ->add(StatusCommand::defaultName(), StatusCommand::class);
     }
 
     /**

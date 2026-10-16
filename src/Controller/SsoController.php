@@ -15,6 +15,7 @@ use Cake\ORM\Exception\PersistenceFailedException;
 use Cake\Routing\Router;
 use Sso\Model\Entity\SsoSetting;
 use Sso\Service\BackchannelLogout;
+use Sso\Service\ClientMetadata;
 use Sso\Service\OidcClient;
 use Sso\Service\Provisioning;
 use Sso\Service\SsoException;
@@ -53,7 +54,7 @@ class SsoController extends Controller
         $this->loadComponent('Flash');
         $this->loadComponent('Authentication.Authentication');
         $this->Authentication->allowUnauthenticated(
-            ['index', 'login', 'callback', 'logout', 'backchannelLogout', 'emergency'],
+            ['index', 'login', 'callback', 'logout', 'backchannelLogout', 'emergency', 'provision', 'clientMetadata'],
         );
 
         $layout = Configure::read('Sso.layout');
@@ -238,6 +239,21 @@ class SsoController extends Controller
         $status = (new BackchannelLogout())->handle($this->getRequest()->getData('logout_token'));
 
         return $this->getResponse()->withHeader('Cache-Control', 'no-store')->withStatus($status);
+    }
+
+    /**
+     * The addresses the provider must register. ClientMetadataMiddleware
+     * answers it before authentication; this action serves an application
+     * whose queue lacks it.
+     *
+     * @return \Cake\Http\Response
+     */
+    public function clientMetadata(): Response
+    {
+        return $this->getResponse()
+            ->withType('application/json')
+            ->withHeader('Cache-Control', 'no-store')
+            ->withStringBody((string)json_encode(ClientMetadata::describe(), JSON_UNESCAPED_SLASHES));
     }
 
     /**

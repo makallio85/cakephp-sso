@@ -21,6 +21,22 @@ class DashboardController extends Controller
     }
 
     /**
+     * A bearer-token API endpoint (OwnAuthApplication): answers with the
+     * identity's email, or 401 without one.
+     *
+     * @return \Cake\Http\Response
+     */
+    public function ping(): Response
+    {
+        $identity = $this->getRequest()->getAttribute('identity');
+        if ($identity === null) {
+            return $this->getResponse()->withStatus(401);
+        }
+
+        return $this->getResponse()->withStringBody('pong ' . (string)$identity->get('email'));
+    }
+
+    /**
      * @return \Cake\Http\Response
      */
     public function health(): Response

@@ -181,6 +181,18 @@ bin/cake sso emergency_login person@example.com --minutes 15
 
 and opens the printed link. It works once, expires, and is logged.
 
+
+`--create` also creates the user when no one has the address, for an empty
+development database such as a pull request preview, where AI agents sign in this
+way. It is refused when the application runs with `debug` off.
+
+## For automation
+
+| What | Use |
+|---|---|
+| `GET /sso/client-metadata` | The addresses the identity provider must register (callback, sign-out return paths from `loginUrl`, back-channel logout, provisioning) and the plugin version. Public, answered before the application's authentication; `new-id-app.sh` reads it |
+| `bin/cake sso status` | The stored connection as JSON (configured, enabled, issuer, client ID, required group), never the secret |
+
 ## Development
 
 ```bash
