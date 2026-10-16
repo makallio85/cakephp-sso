@@ -88,6 +88,56 @@ class SessionCheckMiddlewareTest extends TestCase
         }
     }
 
+    public function testPasswordSessionEndsOncePasswordSignInIsTurnedOff(): void
+    {
+        Configure::write('Sso.passwordSignIn', true);
+        try {
+            $user = $this->createUser();
+            $settings = $this->fetchTable('Sso.SsoSettings');
+            $settings->store([
+                'issuer_url' => 'https://id.example.test/application/o/app/',
+                'client_id' => 'app-client',
+                'client_secret' => 'the-secret',
+                'is_enabled' => true,
+            ]);
+
+            $this->session(['Auth' => $user]);
+            $this->get('/dashboard');
+            $this->assertResponseOk('a password session runs while password sign-in is on');
+
+            $settings->setPasswordSignIn(false, (int)$user->get('id'));
+            $this->session(['Auth' => $user]);
+            $this->get('/dashboard');
+            $this->assertRedirect('https://app.example.test/sso');
+            $this->assertFlashMessage('Password sign-in has been turned off. Please sign in with Rock Software ID.');
+
+            // A session signed in through the provider carries on.
+            $this->signIn($user, time());
+            $this->get('/dashboard');
+            $this->assertResponseOk();
+        } finally {
+            Configure::write('Sso.passwordSignIn', false);
+        }
+    }
+
+    public function testPasswordSessionIsLeftAloneInAnApplicationWithoutAPasswordForm(): void
+    {
+        $user = $this->createUser();
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings->store([
+            'issuer_url' => 'https://id.example.test/application/o/app/',
+            'client_id' => 'app-client',
+            'client_secret' => 'the-secret',
+            'is_enabled' => true,
+        ]);
+        $settings->setPasswordSignIn(false, (int)$user->get('id'));
+
+        $this->session(['Auth' => $user]);
+        $this->get('/dashboard');
+
+        $this->assertResponseOk();
+    }
+
     public function testSessionEndedByBackchannelLogoutIsSignedOut(): void
     {
         $user = $this->createUser();

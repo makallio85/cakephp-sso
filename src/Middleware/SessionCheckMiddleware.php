@@ -8,6 +8,7 @@ use Cake\Datasource\EntityInterface;
 use Cake\Http\Response;
 use Cake\Http\ServerRequest;
 use Cake\Log\Log;
+use Cake\ORM\TableRegistry;
 use Cake\Routing\Router;
 use DateTimeInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -19,19 +20,23 @@ use Sso\Session\SsoSession;
 use Throwable;
 
 /**
- * Signs out a session the account no longer honours, on its next request:
+ * Signs out a session the account no longer honours, on its next request.
+ *
+ * A session the plugin established (`SsoSession::isSsoSession()`) ends when:
  *
  * - the user row is gone or deactivated (the identity provider disabled the
  *   account, or the application did);
  * - the session started before the identity's `sessions_valid_from`, which a
  *   back-channel logout moves forward.
  *
+ * Any other session is the application's to manage, with one exception: in an
+ * application that declared a password form (`Sso.passwordSignIn`), a password
+ * session ends once password sign-in has been turned off on the settings
+ * page. Requests without an identity, and token-authenticated requests (no
+ * identity in the session), always pass through untouched.
+ *
  * The plugin inserts it after the Authentication middleware, which provides
- * the identity. It judges only sessions the plugin established
- * (`SsoSession::isSsoSession()`): requests without an identity, an
- * application's own password sign-in and token-authenticated requests (whose
- * identity is not a user at all) pass through untouched, and stay the
- * application's to manage.
+ * the identity.
  */
 class SessionCheckMiddleware implements MiddlewareInterface
 {
@@ -47,11 +52,15 @@ class SessionCheckMiddleware implements MiddlewareInterface
         }
         /** @var \Authentication\IdentityInterface|null $identity */
         $identity = $request->getAttribute('identity');
-        if (
-            $identity === null
-            || !SsoSession::isSsoSession($request->getSession())
-            || !$this->ended($request, $identity->getIdentifier())
-        ) {
+        $message = null;
+        if ($identity !== null && SsoSession::isSsoSession($request->getSession())) {
+            if ($this->ended($request, $identity->getIdentifier())) {
+                $message = __d('sso', 'Your session has ended. Please sign in again.');
+            }
+        } elseif ($identity !== null && $this->passwordSessionBarred($request)) {
+            $message = __d('sso', 'Password sign-in has been turned off. Please sign in with Rock Software ID.');
+        }
+        if ($message === null) {
             return $handler->handle($request);
         }
 
@@ -62,11 +71,39 @@ class SessionCheckMiddleware implements MiddlewareInterface
         }
         $request->getSession()->destroy();
         $request->getSession()->start();
-        $request->getFlash()->info(__d('sso', 'Your session has ended. Please sign in again.'));
+        $request->getFlash()->info($message);
 
         return (new Response())
             ->withStatus(302)
             ->withLocation(Router::url(Configure::read('Sso.loginUrl'), true));
+    }
+
+    /**
+     * Whether this is a password session in an application whose password
+     * sign-in has been turned off: the application declared a password form
+     * (`Sso.passwordSignIn`), the session holds an identity the plugin did not
+     * establish, and the switch on the settings page is off. A token request
+     * carries no session identity and is never touched.
+     *
+     * @param \Cake\Http\ServerRequest $request The request.
+     * @return bool
+     */
+    private function passwordSessionBarred(ServerRequest $request): bool
+    {
+        if (Configure::read('Sso.passwordSignIn') !== true || !$request->getSession()->check('Auth')) {
+            return false;
+        }
+        try {
+            /** @var \Sso\Model\Table\SsoSettingsTable $settings */
+            $settings = TableRegistry::getTableLocator()->get('Sso.SsoSettings');
+
+            return $settings->enabled() !== null && !$settings->passwordSignInAllowed();
+        } catch (Throwable $e) {
+            // A database hiccup is not evidence the switch is off.
+            Log::warning('SSO password session check skipped: ' . $e->getMessage());
+
+            return false;
+        }
     }
 
     /**

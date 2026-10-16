@@ -162,6 +162,10 @@ if (!$this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed()) {
 }
 ```
 
+Turning it off also ends open password sessions: the plugin's session check signs out
+any browser session it did not establish on its next request. Provider sessions,
+emergency links and token requests are untouched.
+
 It is on until someone turns it off, and always on before the first connection. Turning
 it **off** needs a session signed in through the provider (not a password session, not an
 emergency link) and a connection that answers, so nobody locks themselves out; turning it
