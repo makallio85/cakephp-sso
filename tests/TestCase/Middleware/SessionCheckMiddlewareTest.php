@@ -7,12 +7,11 @@ use Cake\Datasource\EntityInterface;
 use Cake\I18n\DateTime;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
-use Sso\Model\Entity\IdentitySourceType;
 use Sso\Session\SsoSession;
 
 /**
- * The test application adds SessionCheckMiddleware after authentication;
- * /dashboard stands in for any page behind sign-in.
+ * The plugin inserts SessionCheckMiddleware itself; /dashboard stands in for
+ * any page behind sign-in.
  */
 class SessionCheckMiddlewareTest extends TestCase
 {
@@ -20,6 +19,7 @@ class SessionCheckMiddlewareTest extends TestCase
 
     protected array $fixtures = [
         'plugin.Sso.SsoSettings',
+        'plugin.Sso.SsoIdentities',
         'plugin.Sso.Users',
     ];
 
@@ -42,7 +42,7 @@ class SessionCheckMiddlewareTest extends TestCase
 
         $this->get('/dashboard');
 
-        $this->assertRedirect('https://app.example.test/users/login');
+        $this->assertRedirect('https://app.example.test/sso');
         $this->assertFlashMessage('Your session has ended. Please sign in again.');
     }
 
@@ -54,26 +54,24 @@ class SessionCheckMiddlewareTest extends TestCase
 
         $this->get('/dashboard');
 
-        $this->assertRedirect('https://app.example.test/users/login');
+        $this->assertRedirect('https://app.example.test/sso');
     }
 
     public function testSessionEndedByBackchannelLogoutIsSignedOut(): void
     {
         $user = $this->createUser();
         $this->signIn($user, time() - 60);
-        $user->set('sessions_valid_from', DateTime::now());
-        $this->fetchTable('Users')->saveOrFail($user);
+        $this->endSessions(DateTime::now());
 
         $this->get('/dashboard');
 
-        $this->assertRedirect('https://app.example.test/users/login');
+        $this->assertRedirect('https://app.example.test/sso');
     }
 
     public function testSessionStartedAfterBackchannelLogoutPasses(): void
     {
         $user = $this->createUser();
-        $user->set('sessions_valid_from', DateTime::now()->subMinutes(5));
-        $this->fetchTable('Users')->saveOrFail($user);
+        $this->endSessions(DateTime::now()->subMinutes(5));
         $this->signIn($user, time());
 
         $this->get('/dashboard');
@@ -81,7 +79,7 @@ class SessionCheckMiddlewareTest extends TestCase
         $this->assertResponseOk();
     }
 
-    public function testAnonymousRequestIsUntouched(): void
+    public function testAnonymousRequestToSignInPagePasses(): void
     {
         $this->get('/sso');
 
@@ -94,14 +92,34 @@ class SessionCheckMiddlewareTest extends TestCase
     private function createUser(): EntityInterface
     {
         $users = $this->fetchTable('Users');
-
-        return $users->saveOrFail($users->newEntity([
+        $user = $users->saveOrFail($users->newEntity([
             'email' => 'person@example.test',
+            'password' => '!sso:x',
             'name' => 'Person',
             'is_active' => true,
-            'external_id' => 'subject-9',
-            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::SSO),
         ], ['accessibleFields' => ['*' => true], 'validate' => false]));
+        $identities = $this->fetchTable('Sso.SsoIdentities');
+        $identities->saveOrFail($identities->newEntity(
+            ['user_id' => $user->id, 'external_id' => 'subject-9'],
+            ['accessibleFields' => ['*' => true]],
+        ));
+
+        return $user;
+    }
+
+    /**
+     * What a back-channel logout does.
+     *
+     * @param \Cake\I18n\DateTime $from Sessions started before this end.
+     * @return void
+     */
+    private function endSessions(DateTime $from): void
+    {
+        $identities = $this->fetchTable('Sso.SsoIdentities');
+        $identity = $identities->findByExternalId('subject-9');
+        $this->assertNotNull($identity);
+        $identity->set('sessions_valid_from', $from);
+        $identities->saveOrFail($identity);
     }
 
     /**

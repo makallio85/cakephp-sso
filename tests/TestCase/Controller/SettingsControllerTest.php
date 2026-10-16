@@ -10,7 +10,6 @@ use Cake\Http\Client;
 use Cake\Http\TestSuite\HttpClientTrait;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
-use Sso\Model\Entity\IdentitySourceType;
 
 class SettingsControllerTest extends TestCase
 {
@@ -55,7 +54,7 @@ class SettingsControllerTest extends TestCase
 
     protected function tearDown(): void
     {
-        Configure::delete('Sso.settingsAccess');
+        Configure::write('Sso.settingsAccess', null);
         Client::clearMockResponses();
         parent::tearDown();
     }
@@ -64,7 +63,7 @@ class SettingsControllerTest extends TestCase
     {
         $this->get('/sso/settings');
 
-        $this->assertRedirectContains('/users/login');
+        $this->assertRedirectContains('/sso?redirect=%2Fsso%2Fsettings');
     }
 
     public function testAccessIsTheApplicationsDecision(): void
@@ -73,11 +72,12 @@ class SettingsControllerTest extends TestCase
         $this->get('/sso/settings');
         $this->assertResponseCode(403);
 
-        // No callable configured: nobody may.
-        Configure::delete('Sso.settingsAccess');
+        // No callable configured: anyone signed in, who is already in the
+        // application's required group.
+        Configure::write('Sso.settingsAccess', null);
         $this->signIn($this->createUser('admin@example.test'));
         $this->get('/sso/settings');
-        $this->assertResponseCode(403);
+        $this->assertResponseOk();
     }
 
     public function testNotConfiguredPageShowsTheForm(): void
@@ -216,9 +216,8 @@ class SettingsControllerTest extends TestCase
         return $users->saveOrFail($users->newEntity([
             'email' => $email,
             'name' => $email === 'admin@example.test' ? 'Admin' : 'Someone',
+            'password' => '!sso:x',
             'is_active' => true,
-            'external_id' => 'subject-' . md5($email),
-            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::SSO),
         ], ['accessibleFields' => ['*' => true], 'validate' => false]));
     }
 
