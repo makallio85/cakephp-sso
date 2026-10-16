@@ -1,17 +1,17 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Cake\Http\Client;
 use Cake\ORM\Locator\LocatorAwareTrait;
-use Sso\Model\Entity\SsoSetting;
-use Sso\Model\Table\SsoSettingsTable;
+use RockSoftware\Users\Model\Entity\Setting;
+use RockSoftware\Users\Model\Table\SettingsTable;
 use Throwable;
 
 /**
  * Reads, tests and changes the connection to the identity provider that every
- * sign-in uses (`sso_settings`).
+ * sign-in uses (`rock_software_users_settings`).
  *
  * A change is stored only after the new server has answered: a wrong address
  * saved would lock everyone out, and the only way back would be an emergency
@@ -31,9 +31,9 @@ class ConnectionManager
     /**
      * The stored connection, or null before the first configuration.
      *
-     * @return \Sso\Model\Entity\SsoSetting|null
+     * @return \RockSoftware\Users\Model\Entity\Setting|null
      */
-    public function current(): ?SsoSetting
+    public function current(): ?Setting
     {
         return $this->settings()->current();
     }
@@ -48,20 +48,20 @@ class ConnectionManager
     {
         $issuer = $this->normaliseIssuer((string)($data['issuer_url'] ?? ''));
         if (!str_starts_with($issuer, 'https://')) {
-            return __d('sso', 'The identity server address must be an https URL.');
+            return __d('rock_software_users', 'The identity server address must be an https URL.');
         }
 
         // Unsaved: the connection to test, built from the form.
-        $setting = new SsoSetting();
+        $setting = new Setting();
         $setting->set('issuer_url', $issuer, ['guard' => false]);
         $setting->set('client_id', (string)($data['client_id'] ?? ''), ['guard' => false]);
 
         try {
             (new OidcClient($setting, $this->secretFor($data), $this->http))->discovery();
-        } catch (SsoException $e) {
+        } catch (SignInException $e) {
             return $e->getMessage();
         } catch (Throwable $e) {
-            return __d('sso', 'The identity server could not be asked: {0}', $e->getMessage());
+            return __d('rock_software_users', 'The identity server could not be asked: {0}', $e->getMessage());
         }
 
         return null;
@@ -78,11 +78,11 @@ class ConnectionManager
     {
         $secret = trim((string)($data['client_secret'] ?? ''));
         if ($this->current() === null && $secret === '') {
-            return __d('sso', 'Enter the client secret: none is stored yet.');
+            return __d('rock_software_users', 'Enter the client secret: none is stored yet.');
         }
         $clientId = trim((string)($data['client_id'] ?? ''));
         if ($clientId === '') {
-            return __d('sso', 'Enter the client ID.');
+            return __d('rock_software_users', 'Enter the client ID.');
         }
 
         $problem = $this->check($data);
@@ -104,8 +104,8 @@ class ConnectionManager
 
         $this->settings()->getConnection()->transactional(function () use ($values, $userId): void {
             $this->settings()->store($values);
-            /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
-            $changes = $this->fetchTable('Sso.SsoSettingChanges');
+            /** @var \RockSoftware\Users\Model\Table\SettingChangesTable $changes */
+            $changes = $this->fetchTable('RockSoftware/Users.SettingChanges');
             $changes->saveOrFail($changes->newEntity(['user_id' => $userId]));
         });
 
@@ -141,11 +141,11 @@ class ConnectionManager
     }
 
     /**
-     * @return \Sso\Model\Table\SsoSettingsTable
+     * @return \RockSoftware\Users\Model\Table\SettingsTable
      */
-    private function settings(): SsoSettingsTable
+    private function settings(): SettingsTable
     {
-        /** @var \Sso\Model\Table\SsoSettingsTable */
-        return $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable */
+        return $this->fetchTable('RockSoftware/Users.Settings');
     }
 }

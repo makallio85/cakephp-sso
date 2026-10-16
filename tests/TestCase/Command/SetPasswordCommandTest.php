@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase\Command;
+namespace RockSoftware\Users\Test\TestCase\Command;
 
 use Authentication\PasswordHasher\DefaultPasswordHasher;
 use Cake\Console\TestSuite\ConsoleIntegrationTestTrait;
@@ -11,7 +11,7 @@ class SetPasswordCommandTest extends TestCase
 {
     use ConsoleIntegrationTestTrait;
 
-    protected array $fixtures = ['plugin.Sso.Users'];
+    protected array $fixtures = ['plugin.RockSoftware/Users.Users'];
 
     public function testSetsAPasswordReadFromInput(): void
     {
@@ -19,11 +19,11 @@ class SetPasswordCommandTest extends TestCase
         $user = $users->saveOrFail($users->newEntity([
             'email' => 'person@example.test',
             'name' => 'Person',
-            'password' => '!sso:x',
+            'password' => '!rsu:x',
             'is_active' => true,
         ], ['accessibleFields' => ['*' => true], 'validate' => false]));
 
-        $this->exec('sso set_password PERSON@example.test', ['a long enough password']);
+        $this->exec('rock_software_users set_password PERSON@example.test', ['a long enough password']);
 
         $this->assertExitSuccess();
         $hash = (string)$users->get($user->get('id'))->get('password');
@@ -36,11 +36,11 @@ class SetPasswordCommandTest extends TestCase
         $users->saveOrFail($users->newEntity([
             'email' => 'person@example.test',
             'name' => 'Person',
-            'password' => '!sso:x',
+            'password' => '!rsu:x',
             'is_active' => true,
         ], ['accessibleFields' => ['*' => true], 'validate' => false]));
 
-        $this->exec('sso set_password person@example.test', ['short']);
+        $this->exec('rock_software_users set_password person@example.test', ['short']);
 
         $this->assertExitError();
         $this->assertErrorContains('at least 12 characters');
@@ -48,7 +48,7 @@ class SetPasswordCommandTest extends TestCase
 
     public function testRefusesAnUnknownAddress(): void
     {
-        $this->exec('sso set_password nobody@example.test', ['a long enough password']);
+        $this->exec('rock_software_users set_password nobody@example.test', ['a long enough password']);
 
         $this->assertExitError();
         $this->assertErrorContains('No user has the email address');

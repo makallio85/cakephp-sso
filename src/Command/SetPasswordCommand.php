@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Command;
+namespace RockSoftware\Users\Command;
 
 use Cake\Command\Command;
 use Cake\Console\Arguments;
@@ -9,8 +9,8 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\Core\Configure;
 use Cake\Log\Log;
-use Sso\Service\PasswordSignIn;
-use Sso\Service\SsoException;
+use RockSoftware\Users\Service\PasswordSignIn;
+use RockSoftware\Users\Service\SignInException;
 
 /**
  * Sets a user's password for the sign-in page's password form. There is no
@@ -27,7 +27,7 @@ class SetPasswordCommand extends Command
      */
     public static function defaultName(): string
     {
-        return 'sso set_password';
+        return 'rock_software_users set_password';
     }
 
     /**
@@ -59,19 +59,19 @@ class SetPasswordCommand extends Command
 
             return static::CODE_ERROR;
         }
-        if (Configure::read('Sso.passwordSignIn') !== true) {
-            $io->warning('Password sign-in is not offered by this application (Sso.passwordSignIn).');
+        if (Configure::read('RockSoftwareUsers.passwordSignIn') !== true) {
+            $io->warning('Password sign-in is not offered by this application (RockSoftwareUsers.passwordSignIn).');
         }
 
         $password = $this->readPassword($io);
         try {
             $passwords->setPassword($user, $password);
-        } catch (SsoException $e) {
+        } catch (SignInException $e) {
             $io->error($e->getMessage());
 
             return static::CODE_ERROR;
         }
-        Log::warning(sprintf('SSO password set from the command line for %s.', $email));
+        Log::warning(sprintf('Password set from the command line for %s.', $email));
         $io->out(sprintf('Password set for %s.', $email));
 
         return static::CODE_SUCCESS;

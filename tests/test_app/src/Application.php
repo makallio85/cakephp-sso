@@ -9,7 +9,7 @@ use Cake\Http\Middleware\CsrfProtectionMiddleware;
 use Cake\Http\MiddlewareQueue;
 use Cake\Routing\Middleware\RoutingMiddleware;
 use Cake\Routing\RouteBuilder;
-use Sso\SsoPlugin;
+use RockSoftware\Users\UsersPlugin;
 
 /**
  * A consuming application with no sign-in wiring of its own: the queue an
@@ -23,7 +23,7 @@ class Application extends BaseApplication
      */
     public function bootstrap(): void
     {
-        $this->addPlugin(SsoPlugin::class);
+        $this->addPlugin(UsersPlugin::class);
     }
 
     /**

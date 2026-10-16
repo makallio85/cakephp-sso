@@ -1,4 +1,4 @@
-# docker-compose.yml — dev sandbox for the cakephp-sso plugin.
+# docker-compose.yml — dev sandbox for the rocksoftware-cakephp-users plugin.
 #
 # This is NOT a product deployment. The plugin is a library; the container
 # is a long-running development workspace that agents (and humans via SSH)

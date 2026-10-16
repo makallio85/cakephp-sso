@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Cake\Cache\Cache;
 use Cake\Core\Configure;
@@ -10,12 +10,12 @@ use Cake\Event\EventManager;
 use Cake\Http\Client;
 use Cake\Log\Log;
 use Cake\ORM\Locator\LocatorAwareTrait;
-use Sso\Model\Entity\SsoSetting;
-use Sso\SsoPlugin;
+use RockSoftware\Users\Model\Entity\Setting;
+use RockSoftware\Users\UsersPlugin;
 use Throwable;
 
 /**
- * `POST /sso/provision`: the identity provider hands the application its
+ * `POST /auth/provision`: the identity provider hands the application its
  * connection (issuer, client ID, client secret, required group), so connecting
  * an application needs no shell. rocksoftware-identity#5, *Connecting
  * applications automatically*, holds the design.
@@ -43,9 +43,9 @@ class Provisioning
 {
     use LocatorAwareTrait;
 
-    public const EVENT = 'Sso.provisioned';
+    public const EVENT = 'RockSoftwareUsers.provisioned';
 
-    private const RATE_KEY = 'sso_provision_rate';
+    private const RATE_KEY = 'rock_software_users_provision_rate';
 
     /**
      * @param \Cake\Http\Client|null $http Injected by tests.
@@ -61,12 +61,12 @@ class Provisioning
      */
     public static function config(): ?array
     {
-        $config = Configure::read('Sso.provisioning');
+        $config = Configure::read('RockSoftwareUsers.provisioning');
         if ($config === false) {
             return null;
         }
         /** @var array{issuerPrefix: string, subject: string, maxAge: int, rateLimit: int, rateWindow: int} */
-        return array_replace(SsoPlugin::DEFAULTS['provisioning'], is_array($config) ? $config : []);
+        return array_replace(UsersPlugin::DEFAULTS['provisioning'], is_array($config) ? $config : []);
     }
 
     /**
@@ -82,7 +82,7 @@ class Provisioning
             return 404;
         }
         if (!$this->withinRateLimit($config)) {
-            Log::warning('SSO provisioning refused: too many requests.');
+            Log::warning('Provisioning refused: too many requests.');
 
             return 429;
         }
@@ -103,16 +103,16 @@ class Provisioning
         ) {
             return 400;
         }
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         if (!$settings->provisioningOpen()) {
-            Log::warning('SSO provisioning refused: closed; an administrator can allow it on the settings page.');
+            Log::warning('Provisioning refused: closed; an administrator can allow it on the settings page.');
 
             return 401;
         }
         $issuer = rtrim($issuer, '/') . '/';
         if (!self::trustedIssuer($issuer, $config['issuerPrefix'])) {
-            Log::warning('SSO provisioning refused: untrusted issuer.');
+            Log::warning('Provisioning refused: untrusted issuer.');
 
             return 401;
         }
@@ -120,7 +120,7 @@ class Provisioning
             return 401;
         }
 
-        $setting = new SsoSetting();
+        $setting = new Setting();
         $setting->set('issuer_url', $issuer, ['guard' => false]);
         $setting->set('client_id', $clientId, ['guard' => false]);
         try {
@@ -128,21 +128,21 @@ class Provisioning
             // The keys must come from the trusted provider as well.
             $jwksUri = (string)$client->discovery()['jwks_uri'];
             if (!str_starts_with($jwksUri, self::origin($config['issuerPrefix']) . '/')) {
-                throw new SsoException('The discovery document names keys on another host.');
+                throw new SignInException('The discovery document names keys on another host.');
             }
             $claims = $client->validateProvisioningToken($match[1], $config['subject'], $config['maxAge']);
-        } catch (SsoException $e) {
-            Log::warning('SSO provisioning refused: ' . $e->getMessage());
+        } catch (SignInException $e) {
+            Log::warning('Provisioning refused: ' . $e->getMessage());
 
             return 401;
         } catch (Throwable $e) {
-            Log::warning('SSO provisioning refused: ' . get_class($e));
+            Log::warning('Provisioning refused: ' . get_class($e));
 
             return 401;
         }
 
-        /** @var \Sso\Model\Table\SsoProvisioningsTable $provisionings */
-        $provisionings = $this->fetchTable('Sso.SsoProvisionings');
+        /** @var \RockSoftware\Users\Model\Table\ProvisioningsTable $provisionings */
+        $provisionings = $this->fetchTable('RockSoftware/Users.Provisionings');
         $jti = (string)$claims['jti'];
         try {
             $provisionings->getConnection()->transactional(
@@ -157,12 +157,12 @@ class Provisioning
                     $remoteIp,
                 ): void {
                     if ($provisionings->used($jti)) {
-                        throw new SsoException('The provisioning token was used before.');
+                        throw new SignInException('The provisioning token was used before.');
                     }
                     // Checked again inside the transaction: two requests in the
                     // same window must not both get through.
                     if (!$settings->provisioningOpen()) {
-                        throw new SsoException('Provisioning closed meanwhile.');
+                        throw new SignInException('Provisioning closed meanwhile.');
                     }
                     // The unique index on jti refuses a concurrent replay too.
                     $provisionings->saveOrFail($provisionings->newEntity([
@@ -182,13 +182,13 @@ class Provisioning
                 },
             );
         } catch (Throwable $e) {
-            $reason = $e instanceof SsoException ? $e->getMessage() : get_class($e);
-            Log::warning('SSO provisioning refused: ' . $reason);
+            $reason = $e instanceof SignInException ? $e->getMessage() : get_class($e);
+            Log::warning('Provisioning refused: ' . $reason);
 
             return 401;
         }
 
-        Log::notice(sprintf('SSO connection provisioned by %s for client %s.', $issuer, $clientId));
+        Log::notice(sprintf('Connection provisioned by %s for client %s.', $issuer, $clientId));
         EventManager::instance()->dispatch(new Event(self::EVENT, $this, [
             'issuer' => $issuer,
             'clientId' => $clientId,
@@ -235,7 +235,7 @@ class Provisioning
      */
     private function withinRateLimit(array $config): bool
     {
-        $cache = (string)Configure::read('Sso.cacheConfig', 'default');
+        $cache = (string)Configure::read('RockSoftwareUsers.cacheConfig', 'default');
         $now = time();
         $window = Cache::read(self::RATE_KEY, $cache);
         if (!is_array($window) || ($window['start'] ?? 0) <= $now - $config['rateWindow']) {

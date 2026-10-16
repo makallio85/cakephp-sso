@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase\Controller;
+namespace RockSoftware\Users\Test\TestCase\Controller;
 
 use ArrayObject;
 use Cake\Core\Configure;
@@ -10,19 +10,19 @@ use Cake\Event\EventInterface;
 use Cake\Event\EventManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
-use Sso\Controller\UsersController;
-use Sso\Model\Entity\SsoSessionEventType;
-use Sso\Session\SsoSession;
+use RockSoftware\Users\Controller\UsersController;
+use RockSoftware\Users\Model\Entity\SessionEventType;
+use RockSoftware\Users\Session\SignInSession;
 
 class UsersControllerTest extends TestCase
 {
     use IntegrationTestTrait;
 
     protected array $fixtures = [
-        'plugin.Sso.SsoSettings',
-        'plugin.Sso.SsoIdentities',
-        'plugin.Sso.SsoSessionEvents',
-        'plugin.Sso.Users',
+        'plugin.RockSoftware/Users.Settings',
+        'plugin.RockSoftware/Users.Identities',
+        'plugin.RockSoftware/Users.SessionEvents',
+        'plugin.RockSoftware/Users.Users',
     ];
 
     private EntityInterface $admin;
@@ -31,13 +31,13 @@ class UsersControllerTest extends TestCase
     {
         parent::setUp();
         $this->enableCsrfToken();
-        Configure::write('Sso.usersAccess', fn($identity): bool => $identity->get('email') === 'admin@example.test');
+        Configure::write('RockSoftwareUsers.usersAccess', fn($identity): bool => $identity->get('email') === 'admin@example.test');
         $this->admin = $this->createUser('admin@example.test', 'Admin');
     }
 
     protected function tearDown(): void
     {
-        Configure::write('Sso.usersAccess', null);
+        Configure::write('RockSoftwareUsers.usersAccess', null);
         foreach ([UsersController::EVENT_LIST_COLUMNS, UsersController::EVENT_VIEW_SECTIONS, UsersController::EVENT_DEACTIVATED] as $name) {
             EventManager::instance()->off($name);
         }
@@ -48,7 +48,7 @@ class UsersControllerTest extends TestCase
     {
         $this->signIn($this->createUser('someone@example.test', 'Someone'));
 
-        $this->get('/sso/users');
+        $this->get('/auth/users');
 
         $this->assertResponseCode(403);
     }
@@ -56,30 +56,30 @@ class UsersControllerTest extends TestCase
     public function testTheListShowsUsersTheirLinkAndLastSignIn(): void
     {
         $linked = $this->createUser('linked@example.test', 'Linked Person');
-        $identities = $this->fetchTable('Sso.SsoIdentities');
+        $identities = $this->fetchTable('RockSoftware/Users.Identities');
         $identities->saveOrFail($identities->newEntity(
             ['user_id' => $linked->get('id'), 'external_id' => 'subject-1'],
             ['accessibleFields' => ['*' => true]],
         ));
-        $this->fetchTable('Sso.SsoSessionEvents')->record(SsoSessionEventType::SIGNED_IN, [
+        $this->fetchTable('RockSoftware/Users.SessionEvents')->record(SessionEventType::SIGNED_IN, [
             'user_id' => (int)$linked->get('id'),
-            'method' => SsoSession::METHOD_OIDC,
+            'method' => SignInSession::METHOD_OIDC,
         ]);
         $this->createUser('closed@example.test', 'Closed Person', false);
         $this->signIn($this->admin);
 
-        $this->get('/sso/users');
+        $this->get('/auth/users');
 
         $this->assertResponseOk();
         $this->assertResponseContains('Linked Person');
         $this->assertResponseContains('Rock Software ID');
         $this->assertResponseNotContains('Closed Person', 'active users by default');
 
-        $this->get('/sso/users?status=inactive');
+        $this->get('/auth/users?status=inactive');
         $this->assertResponseContains('Closed Person');
         $this->assertResponseNotContains('Linked Person');
 
-        $this->get('/sso/users?status=all&q=linked');
+        $this->get('/auth/users?status=all&q=linked');
         $this->assertResponseContains('Linked Person');
         $this->assertResponseNotContains('Closed Person');
     }
@@ -97,11 +97,11 @@ class UsersControllerTest extends TestCase
         });
         $this->signIn($this->admin);
 
-        $this->get('/sso/users');
+        $this->get('/auth/users');
         $this->assertResponseContains('<th scope="col">Role</th>');
         $this->assertResponseContains('Owner');
 
-        $this->get('/sso/users/' . $this->admin->get('id'));
+        $this->get('/auth/users/' . $this->admin->get('id'));
         $this->assertResponseContains('Permissions');
         $this->assertResponseContains('Viewer of everything');
     }
@@ -115,21 +115,21 @@ class UsersControllerTest extends TestCase
         });
         $this->signIn($this->admin);
 
-        $this->post('/sso/users/' . $person->get('id') . '/deactivate');
+        $this->post('/auth/users/' . $person->get('id') . '/deactivate');
 
-        $this->assertRedirect('/sso/users/' . $person->get('id'));
+        $this->assertRedirect('/auth/users/' . $person->get('id'));
         $this->assertFalse($this->fetchTable('Users')->get($person->get('id'))->get('is_active'));
         $this->assertSame('person@example.test', $deactivated);
 
         $this->signIn($person);
         $this->get('/dashboard');
-        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertRedirect('https://app.example.test/auth');
 
         $this->signIn($this->admin);
-        $this->get('/sso/users/' . $person->get('id'));
+        $this->get('/auth/users/' . $person->get('id'));
         $this->assertResponseContains('Deactivated by Admin');
 
-        $this->post('/sso/users/' . $person->get('id') . '/activate');
+        $this->post('/auth/users/' . $person->get('id') . '/activate');
         $this->assertTrue($this->fetchTable('Users')->get($person->get('id'))->get('is_active'));
     }
 
@@ -137,7 +137,7 @@ class UsersControllerTest extends TestCase
     {
         $this->signIn($this->admin);
 
-        $this->post('/sso/users/' . $this->admin->get('id') . '/deactivate');
+        $this->post('/auth/users/' . $this->admin->get('id') . '/deactivate');
 
         $this->assertFlashMessage('You cannot deactivate yourself.');
         $this->assertTrue($this->fetchTable('Users')->get($this->admin->get('id'))->get('is_active'));
@@ -148,15 +148,15 @@ class UsersControllerTest extends TestCase
         $person = $this->createUser('person@example.test', 'Person');
         $this->signIn($this->admin);
 
-        $this->post('/sso/users/' . $person->get('id') . '/end-sessions');
-        $this->assertRedirect('/sso/users/' . $person->get('id'));
+        $this->post('/auth/users/' . $person->get('id') . '/end-sessions');
+        $this->assertRedirect('/auth/users/' . $person->get('id'));
 
         $this->session([
             'Auth' => $person,
-            'Sso' => ['authenticated' => true, 'method' => SsoSession::METHOD_OIDC, 'establishedAt' => time() - 60],
+            'RockSoftwareUsers' => ['authenticated' => true, 'method' => SignInSession::METHOD_OIDC, 'establishedAt' => time() - 60],
         ]);
         $this->get('/dashboard');
-        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertRedirect('https://app.example.test/auth');
     }
 
     public function testChangesNeedPost(): void
@@ -164,7 +164,7 @@ class UsersControllerTest extends TestCase
         $person = $this->createUser('person@example.test', 'Person');
         $this->signIn($this->admin);
 
-        $this->get('/sso/users/' . $person->get('id') . '/deactivate');
+        $this->get('/auth/users/' . $person->get('id') . '/deactivate');
 
         $this->assertResponseCode(405);
         $this->assertTrue($this->fetchTable('Users')->get($person->get('id'))->get('is_active'));
@@ -174,7 +174,7 @@ class UsersControllerTest extends TestCase
     {
         $this->session([
             'Auth' => $user,
-            'Sso' => ['authenticated' => true, 'method' => SsoSession::METHOD_OIDC, 'establishedAt' => time()],
+            'RockSoftwareUsers' => ['authenticated' => true, 'method' => SignInSession::METHOD_OIDC, 'establishedAt' => time()],
         ]);
     }
 
@@ -185,7 +185,7 @@ class UsersControllerTest extends TestCase
         return $users->saveOrFail($users->newEntity([
             'email' => $email,
             'name' => $name,
-            'password' => '!sso:x',
+            'password' => '!rsu:x',
             'is_active' => $active,
         ], ['accessibleFields' => ['*' => true], 'validate' => false]));
     }

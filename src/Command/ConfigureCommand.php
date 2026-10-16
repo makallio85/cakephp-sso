@@ -1,15 +1,15 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Command;
+namespace RockSoftware\Users\Command;
 
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\ORM\Exception\PersistenceFailedException;
-use Sso\Service\OidcClient;
-use Sso\Service\SsoException;
+use RockSoftware\Users\Service\OidcClient;
+use RockSoftware\Users\Service\SignInException;
 
 /**
  * Writes the identity provider connection.
@@ -25,7 +25,7 @@ class ConfigureCommand extends Command
      */
     public static function defaultName(): string
     {
-        return 'sso configure';
+        return 'rock_software_users configure';
     }
 
     /**
@@ -55,8 +55,8 @@ class ConfigureCommand extends Command
      */
     public function execute(Arguments $args, ConsoleIo $io): int
     {
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $current = $settings->current();
 
         $data = array_filter([
@@ -99,7 +99,7 @@ class ConfigureCommand extends Command
         try {
             (new OidcClient($setting, $settings->clientSecret($setting)))->discovery();
             $io->out('The provider answered its discovery document.');
-        } catch (SsoException $e) {
+        } catch (SignInException $e) {
             $io->warning('The provider could not be reached: ' . $e->getMessage());
         }
 

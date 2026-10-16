@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase;
+namespace RockSoftware\Users\Test\TestCase;
 
 use Cake\TestSuite\TestCase;
 use RecursiveDirectoryIterator;
@@ -16,7 +16,7 @@ class TranslationsTest extends TestCase
     public function testEveryTextHasAFinnishTranslation(): void
     {
         $root = dirname(__DIR__, 2);
-        $po = (string)file_get_contents($root . '/resources/locales/fi/sso.po');
+        $po = (string)file_get_contents($root . '/resources/locales/fi/rock_software_users.po');
         preg_match_all('/^msgid "(.+)"$/m', $po, $ids);
         $translated = array_map(fn(string $id): string => stripcslashes($id), $ids[1]);
 
@@ -27,7 +27,7 @@ class TranslationsTest extends TestCase
                 if ($file->getExtension() !== 'php') {
                     continue;
                 }
-                preg_match_all("/__d\('sso', '((?:[^'\\\\]|\\\\.)*)'/", (string)file_get_contents($file->getPathname()), $m);
+                preg_match_all("/__d\('rock_software_users', '((?:[^'\\\\]|\\\\.)*)'/", (string)file_get_contents($file->getPathname()), $m);
                 foreach ($m[1] as $text) {
                     $text = str_replace("\\'", "'", $text);
                     if (!in_array($text, $translated, true)) {

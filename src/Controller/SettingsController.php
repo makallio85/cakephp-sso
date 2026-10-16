@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Controller;
+namespace RockSoftware\Users\Controller;
 
 use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
@@ -11,25 +11,25 @@ use Cake\Event\EventManager;
 use Cake\Http\Exception\ForbiddenException;
 use Cake\Http\Response;
 use Cake\Routing\Router;
-use Sso\Service\ConnectionManager;
-use Sso\Service\Provisioning;
-use Sso\Service\UserProvisioner;
-use Sso\Session\SsoSession;
+use RockSoftware\Users\Service\ConnectionManager;
+use RockSoftware\Users\Service\Provisioning;
+use RockSoftware\Users\Service\UserProvisioner;
+use RockSoftware\Users\Session\SignInSession;
 
 /**
  * Settings › Identity provider: the connection to the identity provider.
  *
- *   GET  /sso/settings          — the form, and whether the server answers
- *   POST /sso/settings/update   — test, then save
- *   POST /sso/settings/test     — test the values in the form, save nothing
- *   POST /sso/settings/allow-provisioning — let Rock Software ID connect the
+ *   GET  /auth/settings          — the form, and whether the server answers
+ *   POST /auth/settings/update   — test, then save
+ *   POST /auth/settings/test     — test the values in the form, save nothing
+ *   POST /auth/settings/allow-provisioning — let Rock Software ID connect the
  *                                 application again for an hour
- *   POST /sso/settings/password-sign-in — turn password sign-in off or on
- *                                 (`Sso.passwordSignIn`)
- *   POST /sso/settings/sessions — the session limits and the sign-in
+ *   POST /auth/settings/password-sign-in — turn password sign-in off or on
+ *                                 (`RockSoftwareUsers.passwordSignIn`)
+ *   POST /auth/settings/sessions — the session limits and the sign-in
  *                                 history's retention
  *
- * Who may open it is the application's decision: `Sso.settingsAccess`, a
+ * Who may open it is the application's decision: `RockSoftwareUsers.settingsAccess`, a
  * callable receiving the identity and the request. Without one, any signed-in
  * user may, since signing in already required the application's group.
  *
@@ -40,9 +40,9 @@ class SettingsController extends SettingsBaseController
 {
     public const PROVISIONING_WINDOW_MINUTES = 60;
 
-    public const EVENT_PASSWORD_SIGN_IN_CHANGED = 'Sso.passwordSignInChanged';
+    public const EVENT_PASSWORD_SIGN_IN_CHANGED = 'RockSoftwareUsers.passwordSignInChanged';
 
-    public const EVENT_SESSION_LIMITS_CHANGED = 'Sso.sessionLimitsChanged';
+    public const EVENT_SESSION_LIMITS_CHANGED = 'RockSoftwareUsers.sessionLimitsChanged';
 
     /**
      * @return void
@@ -75,10 +75,12 @@ class SettingsController extends SettingsBaseController
             // The Authentication component sends the anonymous request to sign in.
             return;
         }
-        $access = Configure::read('Sso.settingsAccess');
+        $access = Configure::read('RockSoftwareUsers.settingsAccess');
         $allowed = $access === null || (is_callable($access) && $access($identity, $this->getRequest()) === true);
         if (!$allowed) {
-            throw new ForbiddenException(__d('sso', 'You may not change the identity provider settings.'));
+            throw new ForbiddenException(
+                __d('rock_software_users', 'You may not change the identity provider settings.'),
+            );
         }
     }
 
@@ -115,12 +117,14 @@ class SettingsController extends SettingsBaseController
         $userId = (int)$this->Authentication->getIdentity()?->getIdentifier();
         $problem = (new ConnectionManager())->update($data, $userId);
         if ($problem === null) {
-            $this->Flash->success(__d('sso', 'Saved. Sign-in now uses this identity server.'));
+            $this->Flash->success(__d('rock_software_users', 'Saved. Sign-in now uses this identity server.'));
 
             return $this->redirect(['action' => 'index']);
         }
 
-        $this->Flash->error(__d('sso', 'Not saved. {0} The previous settings are still in use.', $problem));
+        $this->Flash->error(
+            __d('rock_software_users', 'Not saved. {0} The previous settings are still in use.', $problem),
+        );
         $this->renderForm($data, $problem, true);
 
         return null;
@@ -138,9 +142,9 @@ class SettingsController extends SettingsBaseController
 
         $problem = (new ConnectionManager())->check($data);
         if ($problem === null) {
-            $this->Flash->success(__d('sso', 'The identity server answered. Nothing was saved.'));
+            $this->Flash->success(__d('rock_software_users', 'The identity server answered. Nothing was saved.'));
         } else {
-            $this->Flash->error(__d('sso', 'The identity server did not answer: {0}', $problem));
+            $this->Flash->error(__d('rock_software_users', 'The identity server did not answer: {0}', $problem));
         }
         $this->renderForm($data, $problem, $problem !== null);
 
@@ -158,8 +162,8 @@ class SettingsController extends SettingsBaseController
         if (!$this->getRequest()->is('post')) {
             return $this->redirect(['action' => 'index']);
         }
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         if ($settings->current() === null || Provisioning::config() === null) {
             return $this->redirect(['action' => 'index']);
         }
@@ -167,11 +171,13 @@ class SettingsController extends SettingsBaseController
         $userId = (int)$this->Authentication->getIdentity()?->getIdentifier();
         $settings->getConnection()->transactional(function () use ($settings, $userId): void {
             $settings->openProvisioning(self::PROVISIONING_WINDOW_MINUTES);
-            /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
-            $changes = $this->fetchTable('Sso.SsoSettingChanges');
+            /** @var \RockSoftware\Users\Model\Table\SettingChangesTable $changes */
+            $changes = $this->fetchTable('RockSoftware/Users.SettingChanges');
             $changes->saveOrFail($changes->newEntity(['user_id' => $userId]));
         });
-        $this->Flash->success(__d('sso', 'Rock Software ID may connect this application during the next hour.'));
+        $this->Flash->success(
+            __d('rock_software_users', 'Rock Software ID may connect this application during the next hour.'),
+        );
 
         return $this->redirect(['action' => 'index']);
     }
@@ -186,11 +192,11 @@ class SettingsController extends SettingsBaseController
      */
     public function passwordSignIn(): ?Response
     {
-        if (!$this->getRequest()->is('post') || Configure::read('Sso.passwordSignIn') !== true) {
+        if (!$this->getRequest()->is('post') || Configure::read('RockSoftwareUsers.passwordSignIn') !== true) {
             return $this->redirect(['action' => 'index']);
         }
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $current = $settings->enabled();
         if ($current === null) {
             return $this->redirect(['action' => 'index']);
@@ -198,7 +204,7 @@ class SettingsController extends SettingsBaseController
         $enable = (string)$this->getRequest()->getData('enabled') === '1';
         if (!$enable && !$this->canTurnPasswordSignInOff()) {
             $this->Flash->error(__d(
-                'sso',
+                'rock_software_users',
                 'Password sign-in stays on. Sign in through Rock Software ID first, so nobody can lock themselves out.',
             ));
 
@@ -211,7 +217,11 @@ class SettingsController extends SettingsBaseController
             ]);
             if ($problem !== null) {
                 $this->Flash->error(
-                    __d('sso', 'Password sign-in stays on: the identity server does not answer. {0}', $problem),
+                    __d(
+                        'rock_software_users',
+                        'Password sign-in stays on: the identity server does not answer. {0}',
+                        $problem,
+                    ),
                 );
 
                 return $this->redirect(['action' => 'index']);
@@ -222,8 +232,8 @@ class SettingsController extends SettingsBaseController
         $userId = (int)$identity?->getIdentifier();
         $settings->getConnection()->transactional(function () use ($settings, $enable, $userId): void {
             $settings->setPasswordSignIn($enable, $userId);
-            /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
-            $changes = $this->fetchTable('Sso.SsoSettingChanges');
+            /** @var \RockSoftware\Users\Model\Table\SettingChangesTable $changes */
+            $changes = $this->fetchTable('RockSoftware/Users.SettingChanges');
             $changes->saveOrFail($changes->newEntity(['user_id' => $userId]));
         });
         EventManager::instance()->dispatch(new Event(self::EVENT_PASSWORD_SIGN_IN_CHANGED, $this, [
@@ -231,8 +241,8 @@ class SettingsController extends SettingsBaseController
             'enabled' => $enable,
         ]));
         $this->Flash->success($enable
-            ? __d('sso', 'Password sign-in is on. People can sign in with their password again.')
-            : __d('sso', 'Password sign-in is off. Only Rock Software ID signs people in.'));
+            ? __d('rock_software_users', 'Password sign-in is on. People can sign in with their password again.')
+            : __d('rock_software_users', 'Password sign-in is off. Only Rock Software ID signs people in.'));
 
         return $this->redirect(['action' => 'index']);
     }
@@ -247,8 +257,8 @@ class SettingsController extends SettingsBaseController
         if (!$this->getRequest()->is('post')) {
             return $this->redirect(['action' => 'index']);
         }
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         if ($settings->current() === null) {
             return $this->redirect(['action' => 'index']);
         }
@@ -260,15 +270,15 @@ class SettingsController extends SettingsBaseController
                 (int)$request->getData('session_idle_minutes'),
                 (int)$request->getData('session_event_retention_days'),
             );
-            /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
-            $changes = $this->fetchTable('Sso.SsoSettingChanges');
+            /** @var \RockSoftware\Users\Model\Table\SettingChangesTable $changes */
+            $changes = $this->fetchTable('RockSoftware/Users.SettingChanges');
             $changes->saveOrFail($changes->newEntity(['user_id' => $userId]));
         });
         EventManager::instance()->dispatch(new Event(self::EVENT_SESSION_LIMITS_CHANGED, $this, [
             'user' => $this->Authentication->getIdentity()?->getOriginalData(),
             'limits' => $settings->sessionLimits(),
         ]));
-        $this->Flash->success(__d('sso', 'Session settings saved.'));
+        $this->Flash->success(__d('rock_software_users', 'Session settings saved.'));
 
         return $this->redirect(['action' => 'index']);
     }
@@ -305,8 +315,8 @@ class SettingsController extends SettingsBaseController
     {
         $session = $this->getRequest()->getSession();
 
-        return SsoSession::isSsoSession($session)
-            && $session->read(SsoSession::METHOD) === SsoSession::METHOD_OIDC;
+        return SignInSession::isProviderSession($session)
+            && $session->read(SignInSession::METHOD) === SignInSession::METHOD_OIDC;
     }
 
     /**
@@ -333,8 +343,8 @@ class SettingsController extends SettingsBaseController
     private function renderForm(array $values, ?string $problem, bool $issuerInvalid = false): void
     {
         unset($values['client_secret']);
-        /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
-        $changes = $this->fetchTable('Sso.SsoSettingChanges');
+        /** @var \RockSoftware\Users\Model\Table\SettingChangesTable $changes */
+        $changes = $this->fetchTable('RockSoftware/Users.SettingChanges');
         $latest = $changes->latest();
 
         $changedBy = $latest === null ? null : $this->userName($latest->user_id);
@@ -345,25 +355,25 @@ class SettingsController extends SettingsBaseController
             'problem' => $problem,
             'issuerInvalid' => $issuerInvalid,
             'callbackUrl' => Router::url(
-                ['plugin' => 'Sso', 'controller' => 'Sso', 'action' => 'callback', 'prefix' => false],
+                ['plugin' => 'RockSoftware/Users', 'controller' => 'SignIn', 'action' => 'callback', 'prefix' => false],
                 true,
             ),
             'lastChange' => $latest,
             'lastChangedBy' => $changedBy,
-            'lastProvisioning' => $this->fetchTable('Sso.SsoProvisionings')->latest(),
+            'lastProvisioning' => $this->fetchTable('RockSoftware/Users.Provisionings')->latest(),
             'provisioningEnabled' => Provisioning::config() !== null,
             'provisioningOpenUntil' => (new ConnectionManager())->current()?->provisioning_open_until,
-            'passwordSignInOffered' => Configure::read('Sso.passwordSignIn') === true
+            'passwordSignInOffered' => Configure::read('RockSoftwareUsers.passwordSignIn') === true
                 && (new ConnectionManager())->current()?->is_enabled === true,
-            'passwordSignInUnsupported' => Configure::read('Sso.passwordSignIn') !== true
+            'passwordSignInUnsupported' => Configure::read('RockSoftwareUsers.passwordSignIn') !== true
                 && (new ConnectionManager())->current()?->is_enabled === true,
-            'passwordSignInEnabled' => $this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed(),
+            'passwordSignInEnabled' => $this->fetchTable('RockSoftware/Users.Settings')->passwordSignInAllowed(),
             'canTurnPasswordSignInOff' => $this->canTurnPasswordSignInOff(),
             'passwordSignInChangedBy' => $this->userName(
                 (new ConnectionManager())->current()?->password_sign_in_changed_by,
             ),
             'passwordSignInChangedAt' => (new ConnectionManager())->current()?->password_sign_in_changed_at,
-            'sessionLimits' => $this->fetchTable('Sso.SsoSettings')->sessionLimits(),
+            'sessionLimits' => $this->fetchTable('RockSoftware/Users.Settings')->sessionLimits(),
         ]);
         $this->render('index');
     }
