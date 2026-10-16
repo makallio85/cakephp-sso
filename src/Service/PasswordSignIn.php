@@ -15,7 +15,8 @@ use Sso\Model\Entity\SsoSessionEventType;
  * The sign-in page's email and password form, checked against the
  * application's own users table.
  *
- * Offered while the application declares passwords (`Sso.passwordSignIn`),
+ * Offered while the application declares passwords (`Sso.passwordSignIn`)
+ * without keeping a form of its own (`Sso.passwordForm` is not `application`),
  * its users table has the password column (`Sso.fields.password`) and the
  * switch on the settings page is on. Hashes are CakePHP's default, so the
  * passwords an application already has keep working; an outdated hash is
@@ -44,7 +45,7 @@ class PasswordSignIn
      */
     public function available(): bool
     {
-        if (Configure::read('Sso.passwordSignIn') !== true) {
+        if (Configure::read('Sso.passwordSignIn') !== true || Configure::read('Sso.passwordForm') === 'application') {
             return false;
         }
         $column = UserProvisioner::fields()['password'];
