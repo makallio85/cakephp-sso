@@ -117,6 +117,44 @@ class UserProvisioner
     }
 
     /**
+     * Creates a user with no link to the identity provider, as a first
+     * sign-in would (the application's `Sso.beforeUserSave` listeners run, a
+     * required password gets an unusable value). For an emergency sign-in on an
+     * empty development database; the first real sign-in with the same verified
+     * address links it.
+     *
+     * @param string $email The email address.
+     * @return \Cake\Datasource\EntityInterface
+     */
+    public function createUser(string $email): EntityInterface
+    {
+        $users = $this->users();
+        $schema = $users->getSchema();
+        $fields = self::fields();
+        $user = $users->newEmptyEntity();
+
+        $values = [$fields['email'] => $email];
+        if (self::has($schema, $fields['name'])) {
+            $values[(string)$fields['name']] = $email;
+        }
+        if (self::has($schema, $fields['is_active'])) {
+            $values[(string)$fields['is_active']] = true;
+        }
+        $values += $this->requiredDefaults($schema);
+        foreach ($values as $field => $value) {
+            $user->set($field, $value, ['guard' => false]);
+        }
+
+        EventManager::instance()->dispatch(new Event(self::EVENT_BEFORE_USER_SAVE, $this, [
+            'user' => $user,
+            'claims' => ['email' => $email, 'name' => $email],
+            'isNew' => true,
+        ]));
+
+        return $users->saveOrFail($user, ['validate' => false]);
+    }
+
+    /**
      * Finds the user a subject identifier belongs to.
      *
      * @param string $subject The provider's subject identifier.

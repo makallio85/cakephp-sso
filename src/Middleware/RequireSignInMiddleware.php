@@ -31,6 +31,8 @@ class RequireSignInMiddleware implements MiddlewareInterface
         '/sso/callback',
         '/sso/logout',
         '/sso/backchannel-logout',
+        '/sso/provision',
+        '/sso/client-metadata',
         '/sso/emergency/*',
     ];
 

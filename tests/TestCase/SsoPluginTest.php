@@ -11,6 +11,7 @@ use Cake\Http\MiddlewareQueue;
 use Cake\Routing\Middleware\RoutingMiddleware;
 use Cake\TestSuite\TestCase;
 use Sso\Middleware\BackchannelLogoutMiddleware;
+use Sso\Middleware\ClientMetadataMiddleware;
 use Sso\Middleware\ProvisionMiddleware;
 use Sso\Middleware\RequireSignInMiddleware;
 use Sso\Middleware\SessionCheckMiddleware;
@@ -37,6 +38,7 @@ class SsoPluginTest extends TestCase
             BodyParserMiddleware::class,
             BackchannelLogoutMiddleware::class,
             ProvisionMiddleware::class,
+            ClientMetadataMiddleware::class,
             CsrfProtectionMiddleware::class,
             AuthenticationMiddleware::class,
             SessionCheckMiddleware::class,
@@ -54,6 +56,7 @@ class SsoPluginTest extends TestCase
             BodyParserMiddleware::class,
             BackchannelLogoutMiddleware::class,
             ProvisionMiddleware::class,
+            ClientMetadataMiddleware::class,
             CsrfProtectionMiddleware::class,
             AuthenticationMiddleware::class,
             SessionCheckMiddleware::class,
