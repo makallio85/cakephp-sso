@@ -52,6 +52,23 @@ class PasswordSignInTest extends TestCase
         $this->assertResponseNotContains('name="password"');
     }
 
+    public function testAnApplicationKeepingItsOwnFormGetsNoneFromThePlugin(): void
+    {
+        Configure::write('Sso.passwordForm', 'application');
+        try {
+            $this->createUser('person@example.test', 'correct horse battery');
+
+            $this->get('/sso');
+            $this->assertResponseNotContains('name="password"');
+
+            $this->post('/sso/password', ['email' => 'person@example.test', 'password' => 'correct horse battery']);
+            $this->assertSessionNotHasKey('Auth');
+            $this->assertSame([SsoSessionEventType::PASSWORD_SIGN_IN_OFF], $this->history());
+        } finally {
+            Configure::write('Sso.passwordForm', 'plugin');
+        }
+    }
+
     public function testTheFormIsGoneOncePasswordSignInIsTurnedOff(): void
     {
         $user = $this->createUser('person@example.test', 'correct horse battery');

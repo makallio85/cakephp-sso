@@ -80,6 +80,7 @@ secret.
 | `loginUrl` | `'/sso'` | The sign-in page |
 | `cacheConfig` | `'default'` | Cache for the provider's discovery document and keys |
 | `passwordSignIn` | `false` | `true` when people may also sign in with a password from the users table: the sign-in page shows the form and `/sso/settings` the switch (see below) |
+| `passwordForm` | `'plugin'` | `'application'` when the application keeps its own password form (for one, with its own second factor): the plugin shows no form and accepts no password, and only provides the switch |
 | `provisioning` | see below | `POST /sso/provision`; `false` switches it off |
 
 An application with its own `AuthenticationMiddleware` keeps it, and keeps deciding which
@@ -187,7 +188,8 @@ it **off** needs a session signed in through the provider (not a password sessio
 emergency link) and a connection that answers, so nobody locks themselves out; turning it
 **on** works from any session allowed on the page.
 
-An application that still has a password form of its own enforces the switch there:
+An application that keeps a password form of its own sets `passwordForm` to
+`'application'` and enforces the switch there:
 
 ```php
 if (!$this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed()) {
