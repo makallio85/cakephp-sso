@@ -20,6 +20,7 @@
  * @var bool $canTurnPasswordSignInOff
  * @var string|null $passwordSignInChangedBy
  * @var \Cake\I18n\DateTime|null $passwordSignInChangedAt
+ * @var array{max_hours: int, idle_minutes: int, retention_days: int} $sessionLimits
  */
 $this->assign('title', __d('sso', 'Identity provider'));
 ?>
@@ -190,6 +191,42 @@ $this->assign('title', __d('sso', 'Identity provider'));
                     : __d('sso', 'Password sign-in turned off by {0}, {1}.', $passwordSignInChangedBy ?? __d('sso', 'a removed user'), $this->Time->format($passwordSignInChangedAt, 'd.M.yyyy HH.mm'))) ?>
             </p>
         <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($configured) : ?>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body p-3 p-md-4">
+                <h2 class="h6 fw-semibold mb-3"><?= __d('sso', 'Sessions') ?></h2>
+                <?= $this->Form->create(null, ['url' => ['plugin' => 'Sso', 'controller' => 'Settings', 'action' => 'sessions']]) ?>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="session-max-hours"><?= __d('sso', 'Longest session') ?></label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="session-max-hours" name="session_max_hours" min="0" value="<?= (int)$sessionLimits['max_hours'] ?>" aria-describedby="session-max-hours-help">
+                            <span class="input-group-text"><?= __d('sso', 'hours') ?></span>
+                        </div>
+                        <div id="session-max-hours-help" class="form-text"><?= __d('sso', 'Then people sign in again. 0 = no limit.') ?></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="session-idle-minutes"><?= __d('sso', 'Sign out when idle') ?></label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="session-idle-minutes" name="session_idle_minutes" min="0" value="<?= (int)$sessionLimits['idle_minutes'] ?>" aria-describedby="session-idle-minutes-help">
+                            <span class="input-group-text"><?= __d('sso', 'minutes') ?></span>
+                        </div>
+                        <div id="session-idle-minutes-help" class="form-text"><?= __d('sso', '0 = never.') ?></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="session-event-retention-days"><?= __d('sso', 'Keep sign-in history') ?></label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="session-event-retention-days" name="session_event_retention_days" min="1" value="<?= (int)$sessionLimits['retention_days'] ?>">
+                            <span class="input-group-text"><?= __d('sso', 'days') ?></span>
+                        </div>
+                    </div>
+                </div>
+                <?= $this->Form->button(__d('sso', 'Save'), ['class' => 'btn btn-primary']) ?>
+                <?= $this->Form->end() ?>
+            </div>
+        </div>
     <?php endif; ?>
 
     <?php if ($lastProvisioning !== null && ($lastChange === null || $lastProvisioning->created >= $lastChange->created)) : ?>

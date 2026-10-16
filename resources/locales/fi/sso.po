@@ -186,3 +186,234 @@ msgstr "Salasanakirjautuminen on kytketty pois. Kirjaudu Rock Software ID:llä."
 
 msgid "Not available. This application has no passwords of its own; people sign in only through Rock Software ID."
 msgstr "Ei käytettävissä. Sovelluksella ei ole omia salasanoja; kirjautuminen tapahtuu vain Rock Software ID:llä."
+
+msgid "Your session has expired. Please sign in again."
+msgstr "Istuntosi on vanhentunut. Kirjaudu uudelleen."
+
+msgid "Password sign-in is off. Sign in with Rock Software ID."
+msgstr "Salasanakirjautuminen on pois päältä. Kirjaudu Rock Software ID:llä."
+
+msgid "Your account has been deactivated in this application."
+msgstr "Käyttäjätunnuksesi on suljettu tässä sovelluksessa."
+
+msgid "The email address or password is wrong."
+msgstr "Sähköpostiosoite tai salasana on väärin."
+
+msgid "Too many failed sign-ins. Try again in {0} minutes, or sign in with Rock Software ID."
+msgstr "Liian monta epäonnistunutta kirjautumista. Yritä uudelleen {0} minuutin kuluttua, tai kirjaudu Rock Software ID:llä."
+
+msgid "You may not manage users."
+msgstr "Sinulla ei ole oikeutta hallita käyttäjiä."
+
+msgid "{0} is signed out of this application."
+msgstr "{0} on kirjattu ulos tästä sovelluksesta."
+
+msgid "You cannot deactivate yourself."
+msgstr "Et voi sulkea omaa tunnustasi."
+
+msgid "{0} can sign in again."
+msgstr "{0} voi taas kirjautua."
+
+msgid "{0} is deactivated and signed out of this application."
+msgstr "{0} on suljettu ja kirjattu ulos tästä sovelluksesta."
+
+msgid "Session settings saved."
+msgstr "Istuntoasetukset tallennettu."
+
+msgid "Rock Software ID"
+msgstr "Rock Software ID"
+
+msgid "Password"
+msgstr "Salasana"
+
+msgid "Emergency link"
+msgstr "Varakirjautuminen"
+
+msgid "Signed in"
+msgstr "Kirjautui"
+
+msgid "Wrong password"
+msgstr "Väärä salasana"
+
+msgid "Unknown email address"
+msgstr "Tuntematon sähköpostiosoite"
+
+msgid "Refused: user deactivated"
+msgstr "Hylätty: tunnus suljettu"
+
+msgid "Refused: not in the required group"
+msgstr "Hylätty: ei vaaditussa ryhmässä"
+
+msgid "Too many attempts"
+msgstr "Liian monta yritystä"
+
+msgid "Refused: password sign-in is off"
+msgstr "Hylätty: salasanakirjautuminen pois päältä"
+
+msgid "Sign-in failed"
+msgstr "Kirjautuminen epäonnistui"
+
+msgid "Signed out"
+msgstr "Kirjautui ulos"
+
+msgid "Signed out by Rock Software ID"
+msgstr "Rock Software ID kirjasi ulos"
+
+msgid "Session expired"
+msgstr "Istunto vanheni"
+
+msgid "Sessions ended by {0}"
+msgstr "{0} päätti istunnot"
+
+msgid "Deactivated by {0}"
+msgstr "{0} sulki tunnuksen"
+
+msgid "Activated by {0}"
+msgstr "{0} avasi tunnuksen"
+
+msgid "Signed in with {0} at {1}"
+msgstr "Kirjautunut: {0} klo {1}"
+
+msgid "Your Rock Software ID account"
+msgstr "Oma Rock Software ID -tili"
+
+msgid "Sign out"
+msgstr "Kirjaudu ulos"
+
+msgid "or with your email address and password"
+msgstr "tai sähköpostilla ja salasanalla"
+
+msgid "Email address"
+msgstr "Sähköposti"
+
+msgid "Forgot your password? Ask an administrator to set a new one, or sign in with Rock Software ID."
+msgstr "Unohtuiko salasana? Pyydä ylläpitäjää asettamaan uusi, tai kirjaudu Rock Software ID:llä."
+
+msgid "Forgot your password? Ask an administrator to set a new one."
+msgstr "Unohtuiko salasana? Pyydä ylläpitäjää asettamaan uusi."
+
+msgid "Menu of {0}"
+msgstr "Käyttäjän {0} valikko"
+
+msgid "Applications"
+msgstr "Sovellukset"
+
+msgid "this one"
+msgstr "tämä"
+
+msgid "Sessions"
+msgstr "Istunnot"
+
+msgid "Longest session"
+msgstr "Istunnon enimmäiskesto"
+
+msgid "hours"
+msgstr "tuntia"
+
+msgid "Then people sign in again. 0 = no limit."
+msgstr "Tämän jälkeen kirjaudutaan uudelleen. 0 = ei rajaa."
+
+msgid "Sign out when idle"
+msgstr "Uloskirjaus käyttämättömänä"
+
+msgid "minutes"
+msgstr "minuuttia"
+
+msgid "0 = never."
+msgstr "0 = ei koskaan."
+
+msgid "Keep sign-in history"
+msgstr "Kirjautumishistorian säilytys"
+
+msgid "days"
+msgstr "päivää"
+
+msgid "Users"
+msgstr "Käyttäjät"
+
+msgid "End sessions"
+msgstr "Päätä istunnot"
+
+msgid "Deactivate"
+msgstr "Sulje tunnus"
+
+msgid "Deactivate {0}? They are signed out of this application and cannot sign in until activated again."
+msgstr "Suljetaanko käyttäjän {0} tunnus? Hänet kirjataan ulos tästä sovelluksesta, eikä hän voi kirjautua ennen kuin tunnus avataan."
+
+msgid "Activate"
+msgstr "Avaa tunnus"
+
+msgid "Details"
+msgstr "Tiedot"
+
+msgid "Status"
+msgstr "Tila"
+
+msgid "Active"
+msgstr "Aktiivinen"
+
+msgid "Deactivated"
+msgstr "Suljettu"
+
+msgid "Not yet linked; linked on their first sign-in"
+msgstr "Ei vielä liitetty; liittyy ensimmäisellä kirjautumisella"
+
+msgid "Linked"
+msgstr "Liitetty"
+
+msgid "Last signed in"
+msgstr "Viimeksi kirjautunut"
+
+msgid "Never"
+msgstr "Ei koskaan"
+
+msgid "Created"
+msgstr "Luotu"
+
+msgid "Sign-in history"
+msgstr "Kirjautumishistoria"
+
+msgid "Kept for {0} days"
+msgstr "Säilytetään {0} päivää"
+
+msgid "Nothing yet."
+msgstr "Ei vielä mitään."
+
+msgid "Time"
+msgstr "Aika"
+
+msgid "Method"
+msgstr "Tapa"
+
+msgid "Event"
+msgstr "Merkintä"
+
+msgid "IP address"
+msgstr "IP-osoite"
+
+msgid "Access to the application and new users are granted in Rock Software ID."
+msgstr "Pääsy sovellukseen ja uudet käyttäjät hoidetaan Rock Software ID:ssä."
+
+msgid "Search"
+msgstr "Haku"
+
+msgid "Name or email address"
+msgstr "Nimi tai sähköposti"
+
+msgid "All"
+msgstr "Kaikki"
+
+msgid "Filter"
+msgstr "Suodata"
+
+msgid "No users match."
+msgstr "Ei käyttäjiä hakuehdoilla."
+
+msgid "Name"
+msgstr "Nimi"
+
+msgid "Not yet"
+msgstr "Ei vielä"
+
+msgid "Pages"
+msgstr "Sivut"

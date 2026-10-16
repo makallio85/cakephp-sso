@@ -15,6 +15,9 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Sso\Model\Entity\SsoSessionEventType;
+use Sso\Service\PasswordSignIn;
+use Sso\Service\SignInHistory;
 use Sso\Service\UserProvisioner;
 use Sso\Session\SsoSession;
 use Throwable;
@@ -22,12 +25,15 @@ use Throwable;
 /**
  * Signs out a session the account no longer honours, on its next request.
  *
- * A session the plugin established (`SsoSession::isSsoSession()`) ends when:
+ * A session the plugin established (`SsoSession::isPluginSession()`) ends when:
  *
- * - the user row is gone or deactivated (the identity provider disabled the
- *   account, or the application did);
+ * - the user row is gone or deactivated in the application;
  * - the session started before the identity's `sessions_valid_from`, which a
- *   back-channel logout moves forward.
+ *   back-channel logout moves forward, or before an administrator ended the
+ *   user's sessions on the users page;
+ * - it is a password session and password sign-in has been turned off;
+ * - it is older than the maximum session length, or idle longer than the idle
+ *   timeout, set on the settings page (both off by default).
  *
  * Any other session is the application's to manage, with one exception: in an
  * application that declared a password form (`Sso.passwordSignIn`), a password
@@ -53,9 +59,20 @@ class SessionCheckMiddleware implements MiddlewareInterface
         /** @var \Authentication\IdentityInterface|null $identity */
         $identity = $request->getAttribute('identity');
         $message = null;
-        if ($identity !== null && SsoSession::isSsoSession($request->getSession())) {
+        $session = $request->getSession();
+        if ($identity !== null && SsoSession::isPluginSession($session)) {
             if ($this->ended($request, $identity->getIdentifier())) {
                 $message = __d('sso', 'Your session has ended. Please sign in again.');
+            } elseif ($this->passwordSessionOff($request)) {
+                $message = __d('sso', 'Password sign-in has been turned off. Please sign in with Rock Software ID.');
+            } elseif ($this->expired($request)) {
+                (new SignInHistory())->record(SsoSessionEventType::SESSION_EXPIRED, [
+                    'user_id' => (int)$identity->getIdentifier(),
+                    'method' => (string)$session->read(SsoSession::METHOD),
+                ], $request);
+                $message = __d('sso', 'Your session has expired. Please sign in again.');
+            } else {
+                $session->write(SsoSession::LAST_SEEN_AT, time());
             }
         } elseif ($identity !== null && $this->passwordSessionBarred($request)) {
             $message = __d('sso', 'Password sign-in has been turned off. Please sign in with Rock Software ID.');
@@ -107,6 +124,54 @@ class SessionCheckMiddleware implements MiddlewareInterface
     }
 
     /**
+     * Whether this plugin password session outlived password sign-in.
+     *
+     * @param \Cake\Http\ServerRequest $request The request.
+     * @return bool
+     */
+    private function passwordSessionOff(ServerRequest $request): bool
+    {
+        if ($request->getSession()->read(SsoSession::METHOD) !== SsoSession::METHOD_PASSWORD) {
+            return false;
+        }
+        try {
+            return !(new PasswordSignIn())->available();
+        } catch (Throwable $e) {
+            Log::warning('SSO password session check skipped: ' . $e->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Whether the session is past the maximum length or the idle timeout.
+     *
+     * @param \Cake\Http\ServerRequest $request The request.
+     * @return bool
+     */
+    private function expired(ServerRequest $request): bool
+    {
+        try {
+            /** @var \Sso\Model\Table\SsoSettingsTable $settings */
+            $settings = TableRegistry::getTableLocator()->get('Sso.SsoSettings');
+            $limits = $settings->sessionLimits();
+        } catch (Throwable $e) {
+            Log::warning('SSO session limits not checked: ' . $e->getMessage());
+
+            return false;
+        }
+        $session = $request->getSession();
+        $now = time();
+        $establishedAt = $session->read(SsoSession::ESTABLISHED_AT);
+        if ($limits['max_hours'] > 0 && is_int($establishedAt) && $now - $establishedAt > $limits['max_hours'] * 3600) {
+            return true;
+        }
+        $lastSeenAt = $session->read(SsoSession::LAST_SEEN_AT);
+
+        return $limits['idle_minutes'] > 0 && is_int($lastSeenAt) && $now - $lastSeenAt > $limits['idle_minutes'] * 60;
+    }
+
+    /**
      * @param \Cake\Http\ServerRequest $request The request.
      * @param mixed $userId The identity's identifier.
      * @return bool
@@ -126,12 +191,14 @@ class SessionCheckMiddleware implements MiddlewareInterface
             return true;
         }
 
-        $activeField = UserProvisioner::fields()['is_active'];
-        if (
-            $activeField !== null
-            && $provisioner->users()->getSchema()->hasColumn($activeField)
-            && !$user->get($activeField)
-        ) {
+        if (!UserProvisioner::isActive($user)) {
+            return true;
+        }
+        $establishedAt = $request->getSession()->read(SsoSession::ESTABLISHED_AT);
+        /** @var \Sso\Model\Table\SsoSessionEventsTable $events */
+        $events = TableRegistry::getTableLocator()->get('Sso.SsoSessionEvents');
+        $endedAt = $events->sessionsEndedAt((int)$user->get('id'));
+        if ($endedAt !== null && (!is_int($establishedAt) || $establishedAt < $endedAt->getTimestamp())) {
             return true;
         }
 
@@ -145,8 +212,6 @@ class SessionCheckMiddleware implements MiddlewareInterface
         if (!$validFrom instanceof DateTimeInterface) {
             return false;
         }
-        $establishedAt = $request->getSession()->read(SsoSession::ESTABLISHED_AT);
-
         // A session with no stamp cannot prove it is newer than the logout.
         return !is_int($establishedAt) || $establishedAt < $validFrom->getTimestamp();
     }
