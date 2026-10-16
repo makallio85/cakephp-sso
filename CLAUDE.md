@@ -22,8 +22,8 @@ composer cs-check
    response is refused. Never weaken a check to make a test pass; add a test for every
    new rejection path.
 3. **No application knowledge.** The plugin establishes identity and provides the pieces
-   every application needs around it (sign-in page, session check, last login, the
-   settings page). Installing stays three steps (require, `addPlugin`, migrate): the
+   every application needs around it (sign-in page with password sign-in, session check
+   and limits, sign-in history, the users page, the user menu, the settings page). Installing stays three steps (require, `addPlugin`, migrate): the
    plugin wires its own middleware in `SsoPlugin::middleware()`, every setting has a
    default in `SsoPlugin::DEFAULTS`, and its data lives in its own tables
    (`sso_identities`), never in columns it asks an application to add. Only `email` on

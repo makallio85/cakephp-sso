@@ -21,6 +21,9 @@ use Cake\ORM\Entity;
  * @property bool $password_sign_in_enabled
  * @property int|null $password_sign_in_changed_by
  * @property \Cake\I18n\DateTime|null $password_sign_in_changed_at
+ * @property int $session_max_hours
+ * @property int $session_idle_minutes
+ * @property int $session_event_retention_days
  * @property \Cake\I18n\DateTime $created
  * @property \Cake\I18n\DateTime $modified
  */
@@ -39,6 +42,9 @@ class SsoSetting extends Entity
         'password_sign_in_enabled' => true,
         'password_sign_in_changed_by' => true,
         'password_sign_in_changed_at' => true,
+        'session_max_hours' => true,
+        'session_idle_minutes' => true,
+        'session_event_retention_days' => true,
     ];
 
     /**

@@ -28,6 +28,7 @@ class RequireSignInMiddleware implements MiddlewareInterface
     public const SIGN_IN_PATHS = [
         '/sso',
         '/sso/login',
+        '/sso/password',
         '/sso/callback',
         '/sso/logout',
         '/sso/backchannel-logout',

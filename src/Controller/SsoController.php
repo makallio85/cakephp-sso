@@ -13,18 +13,22 @@ use Cake\I18n\DateTime;
 use Cake\Log\Log;
 use Cake\ORM\Exception\PersistenceFailedException;
 use Cake\Routing\Router;
+use Sso\Model\Entity\SsoSessionEventType;
 use Sso\Model\Entity\SsoSetting;
 use Sso\Service\BackchannelLogout;
 use Sso\Service\ClientMetadata;
 use Sso\Service\OidcClient;
+use Sso\Service\PasswordSignIn;
 use Sso\Service\Provisioning;
+use Sso\Service\SignInHistory;
 use Sso\Service\SsoException;
+use Sso\Service\UserInactiveException;
 use Sso\Service\UserProvisioner;
 use Sso\Session\SsoSession;
 
 /**
- * Sign-in through the identity provider, sign-out, back-channel logout and
- * emergency sign-in.
+ * Sign-in through the identity provider or with a password, sign-out,
+ * back-channel logout and emergency sign-in.
  *
  * The application's own controllers are not involved. The application learns
  * of each sign-in and sign-out through events:
@@ -54,7 +58,10 @@ class SsoController extends Controller
         $this->loadComponent('Flash');
         $this->loadComponent('Authentication.Authentication');
         $this->Authentication->allowUnauthenticated(
-            ['index', 'login', 'callback', 'logout', 'backchannelLogout', 'emergency', 'provision', 'clientMetadata'],
+            [
+                'index', 'login', 'password', 'callback', 'logout', 'backchannelLogout', 'emergency', 'provision',
+                'clientMetadata',
+            ],
         );
 
         $layout = Configure::read('Sso.layout');
@@ -64,9 +71,10 @@ class SsoController extends Controller
     }
 
     /**
-     * The sign-in page: one button, "Sign in with Rock Software ID". Failed and
-     * refused sign-ins, and signing out, come back here with their reason as a
-     * flash message. An application gives it its look by overriding
+     * The sign-in page: "Sign in with Rock Software ID", and the email and
+     * password form while password sign-in is on. Failed and refused sign-ins,
+     * and signing out, come back here with their reason as a flash message. An
+     * application gives it its look by overriding
      * `templates/plugin/Sso/Sso/index.php`.
      *
      * @return \Cake\Http\Response|null
@@ -80,6 +88,9 @@ class SsoController extends Controller
         $redirect = $this->safeRedirect($this->getRequest()->getQuery('redirect'));
         $this->set([
             'ssoEnabled' => $this->fetchTable('Sso.SsoSettings')->enabled() !== null,
+            'passwordSignIn' => (new PasswordSignIn())->available(),
+            'redirect' => $redirect,
+            'email' => (string)$this->getRequest()->getSession()->consume('Sso.passwordEmail'),
             'signInUrl' => [
                 'plugin' => 'Sso',
                 'controller' => 'Sso',
@@ -122,6 +133,54 @@ class SsoController extends Controller
         }
 
         return $this->redirect($url);
+    }
+
+    /**
+     * The sign-in page's email and password form.
+     *
+     * @return \Cake\Http\Response|null
+     */
+    public function password(): ?Response
+    {
+        $request = $this->getRequest();
+        $redirect = $this->safeRedirect($request->getData('redirect'));
+        $back = ['plugin' => 'Sso', 'controller' => 'Sso', 'action' => 'index', 'prefix' => false,
+            '?' => array_filter(['redirect' => $redirect])];
+        if (!$request->is('post')) {
+            return $this->redirect($back);
+        }
+        $email = trim((string)$request->getData('email'));
+        $ip = SignInHistory::clientIp($request);
+        $attempt = (new PasswordSignIn())->attempt($email, (string)$request->getData('password'), $ip);
+        $user = $attempt['user'];
+
+        if ($attempt['result'] === SsoSessionEventType::SIGNED_IN && $user !== null) {
+            $this->signIn($user, SsoSession::METHOD_PASSWORD, [], null);
+
+            return $this->redirect($redirect ?? Configure::read('Sso.loginRedirect'));
+        }
+
+        (new SignInHistory())->record($attempt['result'], [
+            'user_id' => $user === null ? null : (int)$user->get('id'),
+            'email' => $email,
+            'method' => SsoSession::METHOD_PASSWORD,
+        ], $request);
+        $this->Flash->error(match ($attempt['result']) {
+            SsoSessionEventType::THROTTLED => __d(
+                'sso',
+                'Too many failed sign-ins. Try again in {0} minutes, or sign in with Rock Software ID.',
+                PasswordSignIn::WINDOW_MINUTES,
+            ),
+            SsoSessionEventType::PASSWORD_SIGN_IN_OFF => __d(
+                'sso',
+                'Password sign-in is off. Sign in with Rock Software ID.',
+            ),
+            SsoSessionEventType::USER_INACTIVE => __d('sso', 'Your account has been deactivated in this application.'),
+            default => __d('sso', 'The email address or password is wrong.'),
+        });
+        $request->getSession()->write('Sso.passwordEmail', mb_substr($email, 0, 190));
+
+        return $this->redirect($back);
     }
 
     /**
@@ -169,12 +228,31 @@ class SsoController extends Controller
                     $group,
                     json_encode(array_values((array)($claims['groups'] ?? []))),
                 ));
+                $known = is_string($claims['sub'] ?? null)
+                    ? (new UserProvisioner())->findBySubject((string)$claims['sub'])
+                    : null;
+                (new SignInHistory())->record(SsoSessionEventType::NOT_IN_GROUP, [
+                    'user_id' => $known === null ? null : (int)$known->get('id'),
+                    'email' => is_string($claims['email'] ?? null) ? $claims['email'] : null,
+                    'method' => SsoSession::METHOD_OIDC,
+                ], $this->getRequest());
                 $this->Flash->error(__d('sso', 'Your account has no access to this application.'));
 
                 return $this->redirect($this->loginUrl());
             }
 
             $user = (new UserProvisioner())->provision($claims);
+        } catch (UserInactiveException $e) {
+            $known = (new PasswordSignIn())->findUser((string)($claims['email'] ?? ''));
+            (new SignInHistory())->record(SsoSessionEventType::USER_INACTIVE, [
+                'user_id' => $known === null ? null : (int)$known->get('id'),
+                'email' => is_string($claims['email'] ?? null) ? $claims['email'] : null,
+                'method' => SsoSession::METHOD_OIDC,
+            ], $this->getRequest());
+            Log::warning('SSO sign-in refused: ' . $e->getMessage());
+            $this->Flash->error(__d('sso', 'Your account has been deactivated in this application.'));
+
+            return $this->redirect($this->loginUrl());
         } catch (SsoException $e) {
             return $this->fail($e);
         } catch (PersistenceFailedException $e) {
@@ -204,6 +282,10 @@ class SsoController extends Controller
         $user = $this->Authentication->getIdentity()?->getOriginalData();
         if ($user instanceof EntityInterface) {
             $this->notify(self::EVENT_BEFORE_LOGOUT, ['user' => $user]);
+            (new SignInHistory())->record(SsoSessionEventType::SIGNED_OUT, [
+                'user_id' => (int)$user->get('id'),
+                'method' => is_string($session->read(SsoSession::METHOD)) ? $session->read(SsoSession::METHOD) : null,
+            ], $this->getRequest());
         }
 
         $this->Authentication->logout();
@@ -327,7 +409,7 @@ class SsoController extends Controller
     /**
      * @param \Cake\Datasource\EntityInterface $user The user.
      * @param string $method One of the `SsoSession::METHOD_*` values.
-     * @param array<string, mixed> $claims Verified claims, empty for emergency sign-in.
+     * @param array<string, mixed> $claims Verified claims, empty for password and emergency sign-in.
      * @param string|null $idToken The ID token, kept for ending the provider session.
      * @return void
      */
@@ -342,7 +424,14 @@ class SsoController extends Controller
             SsoSession::METHOD => $method,
             SsoSession::ID_TOKEN => $idToken,
             SsoSession::ESTABLISHED_AT => time(),
+            SsoSession::LAST_SEEN_AT => time(),
+            SsoSession::APPS => self::apps($claims['apps'] ?? null),
         ]);
+        (new SignInHistory())->record(SsoSessionEventType::SIGNED_IN, [
+            'user_id' => (int)$user->get('id'),
+            'email' => (string)$user->get(UserProvisioner::fields()['email']),
+            'method' => $method,
+        ], $this->getRequest());
 
         $provisioner = new UserProvisioner();
         $identity = $provisioner->identities()->findForUser((int)$user->get('id'));
@@ -365,6 +454,32 @@ class SsoController extends Controller
     }
 
     /**
+     * The applications the person may open, from the provider's `apps` claim:
+     * names and https addresses only, at most 50.
+     *
+     * @param mixed $claim The claim.
+     * @return array<array{name: string, url: string}>
+     */
+    public static function apps(mixed $claim): array
+    {
+        if (!is_array($claim)) {
+            return [];
+        }
+        $apps = [];
+        foreach ($claim as $app) {
+            if (
+                is_array($app)
+                && is_string($app['name'] ?? null) && $app['name'] !== ''
+                && is_string($app['url'] ?? null) && str_starts_with($app['url'], 'https://')
+            ) {
+                $apps[] = ['name' => mb_substr($app['name'], 0, 100), 'url' => mb_substr($app['url'], 0, 500)];
+            }
+        }
+
+        return array_slice($apps, 0, 50);
+    }
+
+    /**
      * @param \Sso\Model\Entity\SsoSetting $setting The connection.
      * @return \Sso\Service\OidcClient
      */
@@ -380,6 +495,11 @@ class SsoController extends Controller
     private function fail(SsoException $e): ?Response
     {
         Log::error('SSO sign-in failed: ' . $e->getMessage());
+        (new SignInHistory())->record(
+            SsoSessionEventType::SIGN_IN_FAILED,
+            ['method' => SsoSession::METHOD_OIDC],
+            $this->getRequest(),
+        );
         $this->Flash->error(
             __d('sso', 'Sign-in through Rock Software ID failed. Try again, or contact the administrator.'),
         );

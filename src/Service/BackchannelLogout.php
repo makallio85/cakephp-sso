@@ -9,6 +9,8 @@ use Cake\Event\EventManager;
 use Cake\I18n\DateTime;
 use Cake\Log\Log;
 use Cake\ORM\Locator\LocatorAwareTrait;
+use Sso\Model\Entity\SsoSessionEventType;
+use Sso\Model\Entity\SsoSignInMethodType;
 
 /**
  * The identity provider's back-channel logout: a signed logout token naming a
@@ -67,6 +69,10 @@ class BackchannelLogout
                 $user->set($legacyField, $now, ['guard' => false]);
                 $provisioner->users()->saveOrFail($user, ['validate' => false]);
             }
+            (new SignInHistory())->record(SsoSessionEventType::SIGNED_OUT_BY_PROVIDER, [
+                'user_id' => (int)$user->get('id'),
+                'method' => SsoSignInMethodType::OIDC,
+            ]);
             EventManager::instance()->dispatch(new Event(self::EVENT, $this, ['user' => $user]));
         }
 

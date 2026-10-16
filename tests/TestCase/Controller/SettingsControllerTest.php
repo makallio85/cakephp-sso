@@ -384,6 +384,27 @@ class SettingsControllerTest extends TestCase
         }
     }
 
+    public function testSessionLimitsAreSavedAndShown(): void
+    {
+        $admin = $this->createUser('admin@example.test');
+        $this->connect(self::GOOD);
+        $this->signIn($admin);
+
+        $this->post('/sso/settings/sessions', [
+            'session_max_hours' => '12',
+            'session_idle_minutes' => '60',
+            'session_event_retention_days' => '90',
+        ]);
+
+        $this->assertRedirect('/sso/settings');
+        $this->assertSame(
+            ['max_hours' => 12, 'idle_minutes' => 60, 'retention_days' => 90],
+            $this->fetchTable('Sso.SsoSettings')->sessionLimits(),
+        );
+        $this->get('/sso/settings');
+        $this->assertResponseContains('name="session_idle_minutes" min="0" value="60"');
+    }
+
     public function testAllowProvisioningNeedsPostAndAccess(): void
     {
         $settings = $this->fetchTable('Sso.SsoSettings');

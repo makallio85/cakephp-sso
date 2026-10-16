@@ -12,6 +12,11 @@ use Sso\Service\SecretCipher;
 
 class SsoSettingsTable extends Table
 {
+    public const DEFAULT_RETENTION_DAYS = 180;
+    public const MAX_SESSION_HOURS = 24 * 90;
+    public const MAX_IDLE_MINUTES = 60 * 24;
+    public const MAX_RETENTION_DAYS = 3650;
+
     /**
      * @param array<string, mixed> $config The configuration for the Table.
      * @return void
@@ -130,6 +135,44 @@ class SsoSettingsTable extends Table
         $setting->password_sign_in_enabled = $enabled;
         $setting->password_sign_in_changed_by = $userId;
         $setting->password_sign_in_changed_at = DateTime::now();
+
+        return $this->saveOrFail($setting);
+    }
+
+    /**
+     * The session limits and the sign-in history's retention. Before the first
+     * connection, the defaults: no limits, 180 days.
+     *
+     * @return array{max_hours: int, idle_minutes: int, retention_days: int}
+     */
+    public function sessionLimits(): array
+    {
+        $setting = $this->current();
+
+        return [
+            'max_hours' => (int)($setting->session_max_hours ?? 0),
+            'idle_minutes' => (int)($setting->session_idle_minutes ?? 0),
+            'retention_days' => (int)($setting->session_event_retention_days ?? self::DEFAULT_RETENTION_DAYS),
+        ];
+    }
+
+    /**
+     * Changes the session limits.
+     *
+     * @param int $maxHours Longest session in hours, 0 for none.
+     * @param int $idleMinutes Sign-out after this many idle minutes, 0 for never.
+     * @param int $retentionDays How long the sign-in history is kept.
+     * @return \Sso\Model\Entity\SsoSetting
+     */
+    public function setSessionLimits(int $maxHours, int $idleMinutes, int $retentionDays): SsoSetting
+    {
+        $setting = $this->current();
+        if ($setting === null) {
+            throw new RecordNotFoundException('There is no connection yet.');
+        }
+        $setting->session_max_hours = max(0, min(self::MAX_SESSION_HOURS, $maxHours));
+        $setting->session_idle_minutes = max(0, min(self::MAX_IDLE_MINUTES, $idleMinutes));
+        $setting->session_event_retention_days = max(1, min(self::MAX_RETENTION_DAYS, $retentionDays));
 
         return $this->saveOrFail($setting);
     }

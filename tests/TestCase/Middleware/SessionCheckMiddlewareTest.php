@@ -8,6 +8,7 @@ use Cake\Datasource\EntityInterface;
 use Cake\I18n\DateTime;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use Sso\Model\Table\SsoSettingsTable;
 use Sso\Session\SsoSession;
 
 /**
@@ -21,6 +22,7 @@ class SessionCheckMiddlewareTest extends TestCase
     protected array $fixtures = [
         'plugin.Sso.SsoSettings',
         'plugin.Sso.SsoIdentities',
+        'plugin.Sso.SsoSessionEvents',
         'plugin.Sso.Users',
     ];
 
@@ -165,6 +167,88 @@ class SessionCheckMiddlewareTest extends TestCase
         $this->get('/sso');
 
         $this->assertResponseOk();
+    }
+
+    public function testTheLongestSessionIsEnforced(): void
+    {
+        $user = $this->createUser();
+        $this->connect()->setSessionLimits(8, 0, 180);
+
+        $this->signIn($user, time() - 7 * 3600);
+        $this->get('/dashboard');
+        $this->assertResponseOk();
+
+        $this->signIn($user, time() - 9 * 3600);
+        $this->get('/dashboard');
+        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertFlashMessage('Your session has expired. Please sign in again.');
+    }
+
+    public function testAnIdleSessionIsSignedOut(): void
+    {
+        $user = $this->createUser();
+        $this->connect()->setSessionLimits(0, 30, 180);
+        $session = ['authenticated' => true, 'method' => SsoSession::METHOD_OIDC, 'establishedAt' => time() - 7200];
+
+        $this->session(['Auth' => $user, 'Sso' => $session + ['lastSeenAt' => time() - 600]]);
+        $this->get('/dashboard');
+        $this->assertResponseOk();
+
+        $this->session(['Auth' => $user, 'Sso' => $session + ['lastSeenAt' => time() - 3600]]);
+        $this->get('/dashboard');
+        $this->assertRedirect('https://app.example.test/sso');
+    }
+
+    public function testLimitsAreOffUntilSet(): void
+    {
+        $user = $this->createUser();
+        $this->connect();
+        $this->session(['Auth' => $user, 'Sso' => [
+            'authenticated' => true,
+            'method' => SsoSession::METHOD_OIDC,
+            'establishedAt' => time() - 30 * 86400,
+            'lastSeenAt' => time() - 7 * 86400,
+        ]]);
+
+        $this->get('/dashboard');
+
+        $this->assertResponseOk();
+    }
+
+    public function testThePluginsPasswordSessionEndsOncePasswordSignInIsTurnedOff(): void
+    {
+        Configure::write('Sso.passwordSignIn', true);
+        try {
+            $user = $this->createUser();
+            $session = ['authenticated' => true, 'method' => SsoSession::METHOD_PASSWORD, 'establishedAt' => time()];
+            $this->session(['Auth' => $user, 'Sso' => $session]);
+            $this->get('/dashboard');
+            $this->assertResponseOk();
+
+            $this->connect()->setPasswordSignIn(false, (int)$user->get('id'));
+            $this->session(['Auth' => $user, 'Sso' => $session]);
+            $this->get('/dashboard');
+            $this->assertRedirect('https://app.example.test/sso');
+        } finally {
+            Configure::write('Sso.passwordSignIn', false);
+        }
+    }
+
+    /**
+     * @return \Sso\Model\Table\SsoSettingsTable
+     */
+    private function connect(): SsoSettingsTable
+    {
+        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings->store([
+            'issuer_url' => 'https://id.example.test/application/o/app/',
+            'client_id' => 'app-client',
+            'client_secret' => 'the-secret',
+            'is_enabled' => true,
+        ]);
+
+        return $settings;
     }
 
     /**
