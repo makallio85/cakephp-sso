@@ -17,6 +17,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Sso\Command\ConfigureCommand;
 use Sso\Command\EmergencyLoginCommand;
+use Sso\Command\SetPasswordCommand;
 use Sso\Command\StatusCommand;
 use Sso\Middleware\BackchannelLogoutMiddleware;
 use Sso\Middleware\ClientMetadataMiddleware;
@@ -35,6 +36,7 @@ use Sso\Service\AuthenticationServiceProvider;
  *
  * - `GET /sso` — the sign-in page
  * - `GET /sso/login` — start sign-in; `?redirect=/local/path` returns there
+ * - `POST /sso/password` — the sign-in page's email and password form
  * - `GET /sso/callback` — the redirect URI registered at the provider
  * - `GET|POST /sso/logout` — sign out here and at the provider
  * - `POST /sso/backchannel-logout` — the provider's back-channel logout URI
@@ -42,8 +44,10 @@ use Sso\Service\AuthenticationServiceProvider;
  * - `GET /sso/client-metadata` — the addresses the provider must register
  * - `GET|POST /sso/emergency/{token}` — single-use emergency sign-in
  * - `GET /sso/settings` (+ `POST update`, `POST test`, `POST allow-provisioning`,
- *   `POST password-sign-in`) —
+ *   `POST password-sign-in`, `POST sessions`) —
  *   Settings › Identity provider
+ * - `GET /sso/users`, `GET /sso/users/{id}` (+ `POST deactivate`, `POST
+ *   activate`, `POST end-sessions`) — the users page
  */
 class SsoPlugin extends BasePlugin
 {
@@ -58,8 +62,8 @@ class SsoPlugin extends BasePlugin
      * `Configure::write('Sso', [...])` (usually `config/app.php`).
      *
      * - `userModel`: the application's users table.
-     * - `fields`: column names on it (`email`, `name`, `is_active`); a null or
-     *   missing column is not written.
+     * - `fields`: column names on it (`email`, `name`, `is_active`,
+     *   `password`); a null or missing column is not written.
      * - `loginUrl` / `loginRedirect`: the sign-in page, and where to go after.
      * - `layout`: the sign-in and emergency pages' layout (the plugin's own).
      * - `appName`: shown on the plugin's sign-in layout.
@@ -67,6 +71,8 @@ class SsoPlugin extends BasePlugin
      * - `settingsAccess`: who may open the settings page; a callable receiving
      *   the identity and the request. Null means any signed-in user, who is
      *   already in the application's required group.
+     * - `usersAccess`: who may open the users page; the same kind of callable.
+     *   Null means whoever may open the settings page.
      * - `authentication`: `auto` provides session authentication when the
      *   application has no AuthenticationMiddleware; `true`/`false` force it.
      * - `requireSignIn`: `auto` requires a signed-in session for every route
@@ -77,10 +83,11 @@ class SsoPlugin extends BasePlugin
      *   keep in step as well (1.1 applications); the plugin's own are in
      *   `sso_identities`.
      * - `cacheConfig`: the cache for the provider's discovery document and keys.
-     * - `passwordSignIn`: `true` when the application has a password form of
-     *   its own beside the identity provider. The settings page then offers
-     *   to turn it off and on; the application reads the switch with
-     *   `SsoSettingsTable::passwordSignInAllowed()` and enforces it.
+     * - `passwordSignIn`: `true` when people may also sign in with a password
+     *   kept in the users table (`fields.password`). The sign-in page then
+     *   shows the email and password form, and the settings page a switch to
+     *   turn it off and on. An application that still has a password form of
+     *   its own reads the switch with `SsoSettingsTable::passwordSignInAllowed()`.
      * - `provisioning`: `POST /sso/provision`, or `false` to switch it off.
      *   `issuerPrefix` is the trust anchor: only issuers directly under it are
      *   accepted, and nothing is fetched from anywhere else. `subject` is the
@@ -98,6 +105,7 @@ class SsoPlugin extends BasePlugin
         'appName' => null,
         'createUsers' => true,
         'settingsAccess' => null,
+        'usersAccess' => null,
         'authentication' => 'auto',
         'requireSignIn' => 'auto',
         'publicPaths' => [],
@@ -198,6 +206,7 @@ class SsoPlugin extends BasePlugin
         $routes->plugin('Sso', ['path' => '/sso'], function (RouteBuilder $builder): void {
             $builder->connect('/', ['controller' => 'Sso', 'action' => 'index']);
             $builder->connect('/login', ['controller' => 'Sso', 'action' => 'login']);
+            $builder->connect('/password', ['controller' => 'Sso', 'action' => 'password']);
             $builder->connect('/callback', ['controller' => 'Sso', 'action' => 'callback']);
             $builder->connect('/logout', ['controller' => 'Sso', 'action' => 'logout']);
             $builder->connect('/backchannel-logout', ['controller' => 'Sso', 'action' => 'backchannelLogout']);
@@ -217,6 +226,19 @@ class SsoPlugin extends BasePlugin
                 '/settings/allow-provisioning',
                 ['controller' => 'Settings', 'action' => 'allowProvisioning'],
             );
+            $builder->connect('/settings/sessions', ['controller' => 'Settings', 'action' => 'sessions']);
+            $builder->connect('/users', ['controller' => 'Users', 'action' => 'index']);
+            $userActions = [
+                'view' => '',
+                'deactivate' => '/deactivate',
+                'activate' => '/activate',
+                'endSessions' => '/end-sessions',
+            ];
+            foreach ($userActions as $action => $suffix) {
+                $builder->connect('/users/{id}' . $suffix, ['controller' => 'Users', 'action' => $action])
+                    ->setPass(['id'])
+                    ->setPatterns(['id' => '[0-9]+']);
+            }
         });
     }
 
@@ -229,6 +251,7 @@ class SsoPlugin extends BasePlugin
         return $commands
             ->add(ConfigureCommand::defaultName(), ConfigureCommand::class)
             ->add(EmergencyLoginCommand::defaultName(), EmergencyLoginCommand::class)
+            ->add(SetPasswordCommand::defaultName(), SetPasswordCommand::class)
             ->add(StatusCommand::defaultName(), StatusCommand::class);
     }
 

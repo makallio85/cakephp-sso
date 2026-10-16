@@ -24,8 +24,10 @@ use Sso\Session\SsoSession;
  *   POST /sso/settings/test     — test the values in the form, save nothing
  *   POST /sso/settings/allow-provisioning — let Rock Software ID connect the
  *                                 application again for an hour
- *   POST /sso/settings/password-sign-in — turn the application's own password
- *                                 sign-in off or on (`Sso.passwordSignIn`)
+ *   POST /sso/settings/password-sign-in — turn password sign-in off or on
+ *                                 (`Sso.passwordSignIn`)
+ *   POST /sso/settings/sessions — the session limits and the sign-in
+ *                                 history's retention
  *
  * Who may open it is the application's decision: `Sso.settingsAccess`, a
  * callable receiving the identity and the request. Without one, any signed-in
@@ -39,6 +41,8 @@ class SettingsController extends SettingsBaseController
     public const PROVISIONING_WINDOW_MINUTES = 60;
 
     public const EVENT_PASSWORD_SIGN_IN_CHANGED = 'Sso.passwordSignInChanged';
+
+    public const EVENT_SESSION_LIMITS_CHANGED = 'Sso.sessionLimitsChanged';
 
     /**
      * @return void
@@ -234,6 +238,42 @@ class SettingsController extends SettingsBaseController
     }
 
     /**
+     * Saves the session limits and the sign-in history's retention.
+     *
+     * @return \Cake\Http\Response|null
+     */
+    public function sessions(): ?Response
+    {
+        if (!$this->getRequest()->is('post')) {
+            return $this->redirect(['action' => 'index']);
+        }
+        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        if ($settings->current() === null) {
+            return $this->redirect(['action' => 'index']);
+        }
+        $request = $this->getRequest();
+        $userId = (int)$this->Authentication->getIdentity()?->getIdentifier();
+        $settings->getConnection()->transactional(function () use ($settings, $request, $userId): void {
+            $settings->setSessionLimits(
+                (int)$request->getData('session_max_hours'),
+                (int)$request->getData('session_idle_minutes'),
+                (int)$request->getData('session_event_retention_days'),
+            );
+            /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
+            $changes = $this->fetchTable('Sso.SsoSettingChanges');
+            $changes->saveOrFail($changes->newEntity(['user_id' => $userId]));
+        });
+        EventManager::instance()->dispatch(new Event(self::EVENT_SESSION_LIMITS_CHANGED, $this, [
+            'user' => $this->Authentication->getIdentity()?->getOriginalData(),
+            'limits' => $settings->sessionLimits(),
+        ]));
+        $this->Flash->success(__d('sso', 'Session settings saved.'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /**
      * A user's name (else email) for "changed by" lines, or null when the
      * user is gone or unknown.
      *
@@ -323,6 +363,7 @@ class SettingsController extends SettingsBaseController
                 (new ConnectionManager())->current()?->password_sign_in_changed_by,
             ),
             'passwordSignInChangedAt' => (new ConnectionManager())->current()?->password_sign_in_changed_at,
+            'sessionLimits' => $this->fetchTable('Sso.SsoSettings')->sessionLimits(),
         ]);
         $this->render('index');
     }

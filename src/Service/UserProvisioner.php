@@ -17,6 +17,10 @@ use Sso\Model\Table\SsoIdentitiesTable;
 /**
  * Turns a verified identity into the application's user row.
  *
+ * A user deactivated in the application stays deactivated: signing in is
+ * refused (`UserInactiveException`) until an administrator activates them on
+ * the users page.
+ *
  * The link lives in the plugin's `sso_identities` table, so the application's
  * `users` table needs nothing of its own: the plugin writes only the columns it
  * finds (email, name, active flag; names in `Sso.fields`).
@@ -67,6 +71,11 @@ class UserProvisioner
                 ->first();
         }
 
+        if ($user !== null && !self::isActive($user)) {
+            // Closed in this application; the provider's word does not reopen it.
+            throw new UserInactiveException(sprintf('%s is deactivated in this application.', $email));
+        }
+
         $isNew = $user === null;
         if ($isNew && !Configure::read('Sso.createUsers')) {
             throw new SsoException(sprintf('No user matches %s and creating users is switched off.', $email));
@@ -78,8 +87,7 @@ class UserProvisioner
         if (self::has($schema, $fields['name'])) {
             $values[(string)$fields['name']] = is_string($name) && $name !== '' ? $name : $email;
         }
-        if (self::has($schema, $fields['is_active'])) {
-            // The provider issues tokens only to active accounts.
+        if ($isNew && self::has($schema, $fields['is_active'])) {
             $values[(string)$fields['is_active']] = true;
         }
         if ($isNew) {
@@ -189,16 +197,48 @@ class UserProvisioner
      * Column names on the users table, overridable through `Sso.fields`. A null
      * or missing column is not written.
      *
-     * @return array{email: string, name: string|null, is_active: string|null}
+     * @return array{email: string, name: string|null, is_active: string|null, password: string|null}
      */
     public static function fields(): array
     {
-        /** @var array{email: string, name: string|null, is_active: string|null} */
+        /** @var array{email: string, name: string|null, is_active: string|null, password: string|null} */
         return array_merge([
             'email' => 'email',
             'name' => 'name',
             'is_active' => 'is_active',
+            'password' => 'password',
         ], (array)Configure::read('Sso.fields', []));
+    }
+
+    /**
+     * Whether the user may sign in: true unless the active column exists and
+     * is off.
+     *
+     * @param \Cake\Datasource\EntityInterface $user The user.
+     * @return bool
+     */
+    public static function isActive(EntityInterface $user): bool
+    {
+        $field = self::fields()['is_active'];
+        if ($field === null || !(new self())->users()->getSchema()->hasColumn($field)) {
+            return true;
+        }
+
+        return (bool)$user->get($field);
+    }
+
+    /**
+     * The name shown for a user: the name column, else the email address.
+     *
+     * @param \Cake\Datasource\EntityInterface $user The user.
+     * @return string
+     */
+    public static function displayName(EntityInterface $user): string
+    {
+        $fields = self::fields();
+        $name = $fields['name'] === null ? null : $user->get($fields['name']);
+
+        return is_string($name) && $name !== '' ? $name : (string)$user->get($fields['email']);
     }
 
     /**
@@ -213,7 +253,7 @@ class UserProvisioner
     private function requiredDefaults(TableSchemaInterface $schema): array
     {
         $values = [];
-        foreach (['password'] as $column) {
+        foreach (array_filter([self::fields()['password']]) as $column) {
             $definition = $schema->getColumn($column);
             if ($definition !== null && !$definition['null'] && $definition['default'] === null) {
                 $values[$column] = '!sso:' . bin2hex(random_bytes(24));

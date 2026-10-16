@@ -15,6 +15,7 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 use Cake\Utility\Hash;
 use Sso\Model\Entity\IdentitySourceType;
+use Sso\Model\Entity\SsoSessionEventType;
 use Sso\Session\SsoSession;
 use Sso\Test\TestCase\FakeProvider;
 
@@ -26,6 +27,7 @@ class SsoControllerTest extends TestCase
         'plugin.Sso.SsoSettings',
         'plugin.Sso.SsoEmergencyLogins',
         'plugin.Sso.SsoIdentities',
+        'plugin.Sso.SsoSessionEvents',
         'plugin.Sso.Users',
         'plugin.Sso.LegacyUsers',
     ];
@@ -295,6 +297,56 @@ class SsoControllerTest extends TestCase
         $this->assertInstanceOf(DateTime::class, $user->synced_at);
         $this->assertInstanceOf(DateTime::class, $user->last_login_at);
         $this->assertInstanceOf(DateTime::class, $user->sessions_valid_from);
+    }
+
+    public function testAUserDeactivatedInTheApplicationStaysOut(): void
+    {
+        $users = $this->fetchTable('Users');
+        $user = $this->createLocalUser('person@example.test');
+        $user->set('is_active', false);
+        $users->saveOrFail($user, ['validate' => false]);
+        $identities = $this->fetchTable('Sso.SsoIdentities');
+        $identities->saveOrFail($identities->newEntity(
+            ['user_id' => $user->id, 'external_id' => 'subject-1'],
+            ['accessibleFields' => ['*' => true]],
+        ));
+
+        $this->completeSignIn([]);
+
+        $this->assertRedirect('/sso');
+        $this->assertFlashMessage('Your account has been deactivated in this application.');
+        $this->assertFalse($users->get($user->id)->is_active, 'the provider does not reopen it');
+        $types = $this->fetchTable('Sso.SsoSessionEvents')->find()
+            ->contain(['SsoSessionEventTypes'])
+            ->orderBy(['SsoSessionEvents.id' => 'ASC'])
+            ->all()
+            ->map(fn($event) => $event->sso_session_event_type->value)
+            ->toList();
+        $this->assertSame([SsoSessionEventType::USER_INACTIVE], $types);
+    }
+
+    public function testTheAppsClaimIsKeptForTheMenu(): void
+    {
+        $this->completeSignIn(['apps' => [
+            ['name' => 'Messaging', 'url' => 'https://messaging.example.test/'],
+            ['name' => 'Not https', 'url' => 'http://plain.example.test/'],
+            ['name' => 'Script', 'url' => 'javascript:alert(1)'],
+            'garbage',
+        ]]);
+
+        $this->assertSame(
+            [['name' => 'Messaging', 'url' => 'https://messaging.example.test/']],
+            $this->sessionValue(SsoSession::APPS),
+        );
+    }
+
+    public function testARefusalOutsideTheGroupIsRecorded(): void
+    {
+        $this->completeSignIn(['groups' => ['other']]);
+
+        $event = $this->fetchTable('Sso.SsoSessionEvents')->find()->contain(['SsoSessionEventTypes'])->firstOrFail();
+        $this->assertSame(SsoSessionEventType::NOT_IN_GROUP, $event->sso_session_event_type->value);
+        $this->assertSame('person@example.test', $event->email);
     }
 
     public function testDisabledSettingRefusesLogin(): void

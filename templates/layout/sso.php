@@ -32,6 +32,16 @@ $appName = Configure::read('Sso.appName');
             text-decoration: none; cursor: pointer; }
         .sso-button:hover, .sso-button:focus-visible { background: #3a474c; }
         .sso-button:focus-visible { outline: 2px solid #8f5e4f; outline-offset: 2px; }
+        .sso-button-secondary { background: #fff; color: #1f2a2e; border: 1px solid #8a969b; }
+        .sso-button-secondary:hover, .sso-button-secondary:focus-visible { background: #f2f4f3; }
+        .sso-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: #55636a; font-size: 14px; }
+        .sso-divider::before, .sso-divider::after { content: ""; flex: 1; height: 1px; background: #dfe3e1; }
+        .sso-password-form .input { margin: 0 0 14px; }
+        .sso-password-form label { display: block; margin: 0 0 6px; font-size: 15px; font-weight: 500; }
+        .sso-password-form input[type=email], .sso-password-form input[type=password] { width: 100%; min-height: 44px;
+            padding: 0 12px; border: 1px solid #8a969b; border-radius: 8px; font: inherit; }
+        .sso-password-form input:focus-visible { outline: 2px solid #8f5e4f; outline-offset: 1px; }
+        .sso-hint { margin: 16px 0 0; color: #55636a; font-size: 14px; }
         .sso-notice, .message { margin: 0 0 16px; padding: 12px 14px; border-radius: 8px;
             background: #fff6e5; border: 1px solid #f0d9a8; font-size: 15px; }
         .message.error { background: #fdecec; border-color: #f3c4c4; }
