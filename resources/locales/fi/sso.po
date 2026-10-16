@@ -180,3 +180,6 @@ msgstr "Salasanakirjautuminen on päällä. Ihmiset voivat taas kirjautua salasa
 
 msgid "Password sign-in is off. Only Rock Software ID signs people in."
 msgstr "Salasanakirjautuminen on pois päältä. Vain Rock Software ID kirjaa ihmiset sisään."
+
+msgid "Password sign-in has been turned off. Please sign in with Rock Software ID."
+msgstr "Salasanakirjautuminen on kytketty pois. Kirjaudu Rock Software ID:llä."
