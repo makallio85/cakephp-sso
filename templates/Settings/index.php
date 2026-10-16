@@ -15,6 +15,7 @@
  * @var bool $provisioningEnabled
  * @var \Cake\I18n\DateTime|null $provisioningOpenUntil
  * @var bool $passwordSignInOffered
+ * @var bool $passwordSignInUnsupported
  * @var bool $passwordSignInEnabled
  * @var bool $canTurnPasswordSignInOff
  * @var string|null $passwordSignInChangedBy
@@ -137,6 +138,15 @@ $this->assign('title', __d('sso', 'Identity provider'));
                 </div>
             </div>
         <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($passwordSignInUnsupported) : ?>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body p-3 p-md-4">
+                <div class="fw-semibold mb-1"><?= __d('sso', 'Password sign-in') ?></div>
+                <div class="small text-body-secondary"><?= __d('sso', 'Not available. This application has no passwords of its own; people sign in only through Rock Software ID.') ?></div>
+            </div>
+        </div>
     <?php endif; ?>
 
     <?php if ($passwordSignInOffered) : ?>

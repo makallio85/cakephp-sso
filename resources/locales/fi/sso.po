@@ -183,3 +183,6 @@ msgstr "Salasanakirjautuminen on pois päältä. Vain Rock Software ID kirjaa ih
 
 msgid "Password sign-in has been turned off. Please sign in with Rock Software ID."
 msgstr "Salasanakirjautuminen on kytketty pois. Kirjaudu Rock Software ID:llä."
+
+msgid "Not available. This application has no passwords of its own; people sign in only through Rock Software ID."
+msgstr "Ei käytettävissä. Sovelluksella ei ole omia salasanoja; kirjautuminen tapahtuu vain Rock Software ID:llä."

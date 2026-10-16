@@ -315,6 +315,8 @@ class SettingsController extends SettingsBaseController
             'provisioningOpenUntil' => (new ConnectionManager())->current()?->provisioning_open_until,
             'passwordSignInOffered' => Configure::read('Sso.passwordSignIn') === true
                 && (new ConnectionManager())->current()?->is_enabled === true,
+            'passwordSignInUnsupported' => Configure::read('Sso.passwordSignIn') !== true
+                && (new ConnectionManager())->current()?->is_enabled === true,
             'passwordSignInEnabled' => $this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed(),
             'canTurnPasswordSignInOff' => $this->canTurnPasswordSignInOff(),
             'passwordSignInChangedBy' => $this->userName(
