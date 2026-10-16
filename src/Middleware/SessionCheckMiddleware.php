@@ -27,8 +27,11 @@ use Throwable;
  *   back-channel logout moves forward.
  *
  * The plugin inserts it after the Authentication middleware, which provides
- * the identity. Requests without an identity pass through untouched, so the
- * sign-in routes and the back-channel logout are unaffected.
+ * the identity. It judges only sessions the plugin established
+ * (`SsoSession::isSsoSession()`): requests without an identity, an
+ * application's own password sign-in and token-authenticated requests (whose
+ * identity is not a user at all) pass through untouched, and stay the
+ * application's to manage.
  */
 class SessionCheckMiddleware implements MiddlewareInterface
 {
@@ -44,7 +47,11 @@ class SessionCheckMiddleware implements MiddlewareInterface
         }
         /** @var \Authentication\IdentityInterface|null $identity */
         $identity = $request->getAttribute('identity');
-        if ($identity === null || !$this->ended($request, $identity->getIdentifier())) {
+        if (
+            $identity === null
+            || !SsoSession::isSsoSession($request->getSession())
+            || !$this->ended($request, $identity->getIdentifier())
+        ) {
             return $handler->handle($request);
         }
 

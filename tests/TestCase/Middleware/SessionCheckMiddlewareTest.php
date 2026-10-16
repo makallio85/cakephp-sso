@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Sso\Test\TestCase\Middleware;
 
+use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
 use Cake\I18n\DateTime;
 use Cake\TestSuite\IntegrationTestTrait;
@@ -55,6 +56,36 @@ class SessionCheckMiddlewareTest extends TestCase
         $this->get('/dashboard');
 
         $this->assertRedirect('https://app.example.test/sso');
+    }
+
+    public function testSessionThePluginDidNotEstablishIsLeftAlone(): void
+    {
+        // An application's own sign-in (a password form, a token) is its to
+        // manage: no Sso keys in the session, an identity the plugin may not
+        // even recognise as a user.
+        $user = $this->createUser();
+        $this->session(['Auth' => $user]);
+        $this->fetchTable('Users')->deleteOrFail($user);
+
+        $this->get('/dashboard');
+
+        $this->assertResponseOk();
+    }
+
+    public function testLocalSessionIsNotEndedByAnOldTimestamp(): void
+    {
+        Configure::write('Sso.sessionsValidFromField', 'sessions_valid_from');
+        try {
+            $user = $this->createUser();
+            $this->session(['Auth' => $user]);
+            $this->endSessions(DateTime::now());
+
+            $this->get('/dashboard');
+
+            $this->assertResponseOk();
+        } finally {
+            Configure::write('Sso.sessionsValidFromField', null);
+        }
     }
 
     public function testSessionEndedByBackchannelLogoutIsSignedOut(): void
