@@ -1,18 +1,18 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Middleware;
+namespace RockSoftware\Users\Middleware;
 
 use Cake\Http\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
-use Sso\Service\ClientMetadata;
-use Sso\SsoPlugin;
+use RockSoftware\Users\Service\ClientMetadata;
+use RockSoftware\Users\UsersPlugin;
 
 /**
- * Answers `GET /sso/client-metadata` itself, before the application's
+ * Answers `GET /auth/client-metadata` itself, before the application's
  * authentication: the addresses the identity provider must register for this
  * application, so `new-id-app.sh` reads them instead of being told. Nothing in
  * it is secret; every address it names is reachable by anyone anyway.
@@ -26,7 +26,7 @@ class ClientMetadataMiddleware implements MiddlewareInterface
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if ($request->getUri()->getPath() !== SsoPlugin::CLIENT_METADATA_PATH) {
+        if ($request->getUri()->getPath() !== UsersPlugin::CLIENT_METADATA_PATH) {
             return $handler->handle($request);
         }
         if ($request->getMethod() !== 'GET') {

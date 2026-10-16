@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Authentication\PasswordHasher\DefaultPasswordHasher;
 use Cake\Core\Configure;
@@ -9,15 +9,14 @@ use Cake\Database\Expression\QueryExpression;
 use Cake\Datasource\EntityInterface;
 use Cake\ORM\Locator\LocatorAwareTrait;
 use Cake\ORM\Query\SelectQuery;
-use Sso\Model\Entity\SsoSessionEventType;
+use RockSoftware\Users\Model\Entity\SessionEventType;
 
 /**
  * The sign-in page's email and password form, checked against the
  * application's own users table.
  *
- * Offered while the application declares passwords (`Sso.passwordSignIn`)
- * without keeping a form of its own (`Sso.passwordForm` is not `application`),
- * its users table has the password column (`Sso.fields.password`) and the
+ * Offered while the application declares passwords (`RockSoftwareUsers.passwordSignIn`),
+ * its users table has the password column (`RockSoftwareUsers.fields.password`) and the
  * switch on the settings page is on. Hashes are CakePHP's default, so the
  * passwords an application already has keep working; an outdated hash is
  * replaced on the next sign-in.
@@ -45,15 +44,15 @@ class PasswordSignIn
      */
     public function available(): bool
     {
-        if (Configure::read('Sso.passwordSignIn') !== true || Configure::read('Sso.passwordForm') === 'application') {
+        if (Configure::read('RockSoftwareUsers.passwordSignIn') !== true) {
             return false;
         }
         $column = UserProvisioner::fields()['password'];
         if ($column === null || !(new UserProvisioner())->users()->getSchema()->hasColumn($column)) {
             return false;
         }
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
 
         return $settings->passwordSignInAllowed();
     }
@@ -65,19 +64,19 @@ class PasswordSignIn
      * @param string $password The password typed.
      * @param string|null $ip The client's address.
      * @return array{result: string, user: \Cake\Datasource\EntityInterface|null}
-     *   `result` is `SsoSessionEventType::SIGNED_IN` or the refusal.
+     *   `result` is `SessionEventType::SIGNED_IN` or the refusal.
      */
     public function attempt(string $email, string $password, ?string $ip): array
     {
         $email = trim($email);
         if (!$this->available()) {
-            return ['result' => SsoSessionEventType::PASSWORD_SIGN_IN_OFF, 'user' => null];
+            return ['result' => SessionEventType::PASSWORD_SIGN_IN_OFF, 'user' => null];
         }
-        /** @var \Sso\Model\Table\SsoSessionEventsTable $events */
-        $events = $this->fetchTable('Sso.SsoSessionEvents');
+        /** @var \RockSoftware\Users\Model\Table\SessionEventsTable $events */
+        $events = $this->fetchTable('RockSoftware/Users.SessionEvents');
         $failures = $events->recentPasswordFailures($email, $ip, self::WINDOW_MINUTES);
         if ($failures['email'] >= self::MAX_FAILURES_PER_EMAIL || $failures['ip'] >= self::MAX_FAILURES_PER_IP) {
-            return ['result' => SsoSessionEventType::THROTTLED, 'user' => $this->findUser($email)];
+            return ['result' => SessionEventType::THROTTLED, 'user' => $this->findUser($email)];
         }
 
         $hasher = new DefaultPasswordHasher();
@@ -88,25 +87,25 @@ class PasswordSignIn
             // tell which addresses have an account.
             $hasher->check($password, self::TIMING_HASH);
 
-            return ['result' => SsoSessionEventType::UNKNOWN_EMAIL, 'user' => null];
+            return ['result' => SessionEventType::UNKNOWN_EMAIL, 'user' => null];
         }
         $hash = (string)$user->get($column);
         if ($password === '' || !$hasher->check($password, $hash)) {
-            return ['result' => SsoSessionEventType::WRONG_PASSWORD, 'user' => $user];
+            return ['result' => SessionEventType::WRONG_PASSWORD, 'user' => $user];
         }
         if (!UserProvisioner::isActive($user)) {
-            return ['result' => SsoSessionEventType::USER_INACTIVE, 'user' => $user];
+            return ['result' => SessionEventType::USER_INACTIVE, 'user' => $user];
         }
         if ($hasher->needsRehash($hash)) {
             $user->set($column, $hasher->hash($password), ['guard' => false]);
             (new UserProvisioner())->users()->saveOrFail($user, ['validate' => false]);
         }
 
-        return ['result' => SsoSessionEventType::SIGNED_IN, 'user' => $user];
+        return ['result' => SessionEventType::SIGNED_IN, 'user' => $user];
     }
 
     /**
-     * Sets a user's password (`bin/cake sso set_password`).
+     * Sets a user's password (`bin/cake rock_software_users set_password`).
      *
      * @param \Cake\Datasource\EntityInterface $user The user.
      * @param string $password The new password, at least `MIN_LENGTH` characters.
@@ -115,12 +114,12 @@ class PasswordSignIn
     public function setPassword(EntityInterface $user, string $password): void
     {
         if (mb_strlen($password) < self::MIN_LENGTH) {
-            throw new SsoException(sprintf('The password must be at least %d characters.', self::MIN_LENGTH));
+            throw new SignInException(sprintf('The password must be at least %d characters.', self::MIN_LENGTH));
         }
         $column = UserProvisioner::fields()['password'];
         $users = (new UserProvisioner())->users();
         if ($column === null || !$users->getSchema()->hasColumn($column)) {
-            throw new SsoException('The users table has no password column.');
+            throw new SignInException('The users table has no password column.');
         }
         $user->set($column, (new DefaultPasswordHasher())->hash($password), ['guard' => false]);
         $users->saveOrFail($user, ['validate' => false]);

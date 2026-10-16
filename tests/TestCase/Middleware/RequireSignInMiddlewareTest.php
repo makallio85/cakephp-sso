@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase\Middleware;
+namespace RockSoftware\Users\Test\TestCase\Middleware;
 
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -15,16 +15,16 @@ class RequireSignInMiddlewareTest extends TestCase
     use IntegrationTestTrait;
 
     protected array $fixtures = [
-        'plugin.Sso.SsoSettings',
-        'plugin.Sso.SsoIdentities',
-        'plugin.Sso.Users',
+        'plugin.RockSoftware/Users.Settings',
+        'plugin.RockSoftware/Users.Identities',
+        'plugin.RockSoftware/Users.Users',
     ];
 
     public function testAnonymousPageRequestIsSentToSignInAndBack(): void
     {
         $this->get('/dashboard?tab=2');
 
-        $this->assertRedirect('/sso?redirect=%2Fdashboard%3Ftab%3D2');
+        $this->assertRedirect('/auth?redirect=%2Fdashboard%3Ftab%3D2');
     }
 
     public function testAnonymousJsonRequestGets401(): void
@@ -43,22 +43,22 @@ class RequireSignInMiddlewareTest extends TestCase
         $this->assertResponseOk();
         $this->assertResponseEquals('ok');
 
-        $this->get('/sso');
+        $this->get('/auth');
         $this->assertResponseOk();
     }
 
     public function testSettingsPageIsNotPublic(): void
     {
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
 
-        $this->assertRedirect('/sso?redirect=%2Fsso%2Fsettings');
+        $this->assertRedirect('/auth?redirect=%2Fauth%2Fsettings');
     }
 
     public function testSignInPageUsesThePluginsLayout(): void
     {
-        $this->get('/sso');
+        $this->get('/auth');
 
-        $this->assertResponseContains('<p class="sso-app">Test App</p>');
-        $this->assertResponseContains('<main class="sso-card">');
+        $this->assertResponseContains('<p class="rsu-app">Test App</p>');
+        $this->assertResponseContains('<main class="rsu-card">');
     }
 }

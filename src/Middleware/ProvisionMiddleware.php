@@ -1,18 +1,18 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Middleware;
+namespace RockSoftware\Users\Middleware;
 
 use Cake\Http\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
-use Sso\Service\Provisioning;
-use Sso\SsoPlugin;
+use RockSoftware\Users\Service\Provisioning;
+use RockSoftware\Users\UsersPlugin;
 
 /**
- * Answers `POST /sso/provision` itself, before the application's CSRF check
+ * Answers `POST /auth/provision` itself, before the application's CSRF check
  * and sign-in requirement: the bearer token is what authorises it. Every other
  * request passes through. The body, which carries the client secret, is read
  * here and nowhere else, so no later error page or log can show it.
@@ -26,7 +26,7 @@ class ProvisionMiddleware implements MiddlewareInterface
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if ($request->getUri()->getPath() !== SsoPlugin::PROVISION_PATH) {
+        if ($request->getUri()->getPath() !== UsersPlugin::PROVISION_PATH) {
             return $handler->handle($request);
         }
         if (Provisioning::config() === null) {

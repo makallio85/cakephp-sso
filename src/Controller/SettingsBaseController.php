@@ -8,10 +8,10 @@ declare(strict_types=1);
  * one (the plugin's own tests) it extends CakePHP's controller.
  *
  * This file only declares that alias; the autoloader includes it when
- * `Sso\Controller\SettingsBaseController` is first used.
+ * `RockSoftware\Users\Controller\SettingsBaseController` is first used.
  */
 
-namespace Sso\Controller;
+namespace RockSoftware\Users\Controller;
 
 use Cake\Controller\Controller;
 

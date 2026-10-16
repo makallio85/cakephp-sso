@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Authentication\AuthenticationService;
 use Authentication\AuthenticationServiceInterface;
@@ -23,7 +23,7 @@ class AuthenticationServiceProvider implements AuthenticationServiceProviderInte
     public function getAuthenticationService(ServerRequestInterface $request): AuthenticationServiceInterface
     {
         $service = new AuthenticationService([
-            'unauthenticatedRedirect' => Configure::read('Sso.loginUrl'),
+            'unauthenticatedRedirect' => Configure::read('RockSoftwareUsers.signInUrl'),
             'queryParam' => 'redirect',
         ]);
         $service->loadAuthenticator('Authentication.Session');

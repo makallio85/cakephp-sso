@@ -1,16 +1,15 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
-use Cake\Core\Configure;
 use Cake\Event\Event;
 use Cake\Event\EventManager;
 use Cake\I18n\DateTime;
 use Cake\Log\Log;
 use Cake\ORM\Locator\LocatorAwareTrait;
-use Sso\Model\Entity\SsoSessionEventType;
-use Sso\Model\Entity\SsoSignInMethodType;
+use RockSoftware\Users\Model\Entity\SessionEventType;
+use RockSoftware\Users\Model\Entity\SignInMethodType;
 
 /**
  * The identity provider's back-channel logout: a signed logout token naming a
@@ -22,7 +21,7 @@ class BackchannelLogout
 {
     use LocatorAwareTrait;
 
-    public const EVENT = 'Sso.backchannelLogout';
+    public const EVENT = 'RockSoftwareUsers.backchannelLogout';
 
     /**
      * @param mixed $token The `logout_token` form field.
@@ -30,8 +29,8 @@ class BackchannelLogout
      */
     public function handle(mixed $token): int
     {
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $setting = $settings->enabled();
         if ($setting === null || !is_string($token)) {
             return 400;
@@ -39,8 +38,8 @@ class BackchannelLogout
 
         try {
             $claims = (new OidcClient($setting, $settings->clientSecret($setting)))->validateLogoutToken($token);
-        } catch (SsoException $e) {
-            Log::warning('SSO back-channel logout rejected: ' . $e->getMessage());
+        } catch (SignInException $e) {
+            Log::warning('Back-channel logout rejected: ' . $e->getMessage());
 
             return 400;
         }
@@ -49,8 +48,8 @@ class BackchannelLogout
         if (!is_string($subject)) {
             return 200;
         }
-        /** @var \Sso\Model\Table\SsoIdentitiesTable $identities */
-        $identities = $this->fetchTable('Sso.SsoIdentities');
+        /** @var \RockSoftware\Users\Model\Table\IdentitiesTable $identities */
+        $identities = $this->fetchTable('RockSoftware/Users.Identities');
         $identity = $identities->findByExternalId($subject);
         if ($identity === null) {
             return 200;
@@ -63,15 +62,9 @@ class BackchannelLogout
         $provisioner = new UserProvisioner();
         $user = $provisioner->users()->find()->where(['id' => $identity->user_id])->first();
         if ($user !== null) {
-            // A 1.1 application may still read its own column.
-            $legacyField = Configure::read('Sso.sessionsValidFromField');
-            if (is_string($legacyField) && $provisioner->users()->getSchema()->hasColumn($legacyField)) {
-                $user->set($legacyField, $now, ['guard' => false]);
-                $provisioner->users()->saveOrFail($user, ['validate' => false]);
-            }
-            (new SignInHistory())->record(SsoSessionEventType::SIGNED_OUT_BY_PROVIDER, [
+            (new SignInHistory())->record(SessionEventType::SIGNED_OUT_BY_PROVIDER, [
                 'user_id' => (int)$user->get('id'),
-                'method' => SsoSignInMethodType::OIDC,
+                'method' => SignInMethodType::OIDC,
             ]);
             EventManager::instance()->dispatch(new Event(self::EVENT, $this, ['user' => $user]));
         }

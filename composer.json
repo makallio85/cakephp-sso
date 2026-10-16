@@ -1,6 +1,6 @@
 {
-    "name": "makallio85/cakephp-sso",
-    "description": "CakePHP 5 plugin that signs users in through the central Rock Software identity provider (OpenID Connect).",
+    "name": "makallio85/rocksoftware-cakephp-users",
+    "description": "CakePHP 5 plugin for everything about signing in to a Rock Software application: Rock Software ID (OpenID Connect), password sign-in, sessions, sign-in history, the users page and the user menu.",
     "type": "cakephp-plugin",
     "keywords": ["cakephp", "sso", "oidc", "openid-connect", "authentik"],
     "license": "proprietary",
@@ -23,12 +23,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Sso\\": "src/"
+            "RockSoftware\\Users\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Sso\\Test\\": "tests/",
+            "RockSoftware\\Users\\Test\\": "tests/",
             "TestApp\\": "tests/test_app/src/"
         }
     },

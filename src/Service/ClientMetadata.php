@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Cake\Core\Configure;
 use Composer\InstalledVersions;
-use Sso\Middleware\RequireSignInMiddleware;
-use Sso\SsoPlugin;
+use RockSoftware\Users\Middleware\RequireSignInMiddleware;
+use RockSoftware\Users\UsersPlugin;
 use Throwable;
 
 /**
@@ -21,21 +21,21 @@ final class ClientMetadata
      */
     public static function describe(): array
     {
-        $loginUrl = (string)Configure::read('Sso.loginUrl', '/sso');
-        $logout = array_values(array_unique([$loginUrl, '/sso']));
+        $signInUrl = (string)Configure::read('RockSoftwareUsers.signInUrl', '/auth');
+        $logout = array_values(array_unique([$signInUrl, '/auth']));
 
         try {
-            $version = InstalledVersions::getPrettyVersion('makallio85/cakephp-sso');
+            $version = InstalledVersions::getPrettyVersion('makallio85/rocksoftware-cakephp-users');
         } catch (Throwable) {
             $version = null;
         }
 
         return [
-            'redirect_uri' => '/sso/callback',
+            'redirect_uri' => '/auth/callback',
             'post_logout_redirect_uris' => $logout,
-            'backchannel_logout_uri' => SsoPlugin::BACKCHANNEL_LOGOUT_PATH,
-            'provision_uri' => Provisioning::config() === null ? null : SsoPlugin::PROVISION_PATH,
-            'password_sign_in' => Configure::read('Sso.passwordSignIn') === true,
+            'backchannel_logout_uri' => UsersPlugin::BACKCHANNEL_LOGOUT_PATH,
+            'provision_uri' => Provisioning::config() === null ? null : UsersPlugin::PROVISION_PATH,
+            'password_sign_in' => Configure::read('RockSoftwareUsers.passwordSignIn') === true,
             'plugin_version' => $version,
             'sign_in_paths' => RequireSignInMiddleware::SIGN_IN_PATHS,
         ];

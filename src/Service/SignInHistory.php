@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Cake\Log\Log;
 use Cake\ORM\Locator\LocatorAwareTrait;
 use Psr\Http\Message\ServerRequestInterface;
-use Sso\Model\Entity\SsoSessionEventType;
+use RockSoftware\Users\Model\Entity\SessionEventType;
 use Throwable;
 
 /**
@@ -18,7 +18,7 @@ class SignInHistory
     use LocatorAwareTrait;
 
     /**
-     * @param string $type One of the `SsoSessionEventType` value constants.
+     * @param string $type One of the `SessionEventType` value constants.
      * @param array{user_id?: int|null, email?: string|null, method?: string|null, actor_user_id?: int|null} $data What is known.
      * @param \Psr\Http\Message\ServerRequestInterface|null $request The request, for the client's address.
      * @return void
@@ -26,16 +26,16 @@ class SignInHistory
     public function record(string $type, array $data = [], ?ServerRequestInterface $request = null): void
     {
         try {
-            /** @var \Sso\Model\Table\SsoSessionEventsTable $events */
-            $events = $this->fetchTable('Sso.SsoSessionEvents');
+            /** @var \RockSoftware\Users\Model\Table\SessionEventsTable $events */
+            $events = $this->fetchTable('RockSoftware/Users.SessionEvents');
             $events->record($type, $data + ['ip_address' => self::clientIp($request)]);
-            if ($type === SsoSessionEventType::SIGNED_IN) {
-                /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-                $settings = $this->fetchTable('Sso.SsoSettings');
+            if ($type === SessionEventType::SIGNED_IN) {
+                /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+                $settings = $this->fetchTable('RockSoftware/Users.Settings');
                 $events->prune($settings->sessionLimits()['retention_days']);
             }
         } catch (Throwable $e) {
-            Log::error(sprintf('SSO sign-in history not written (%s): %s', $type, $e->getMessage()));
+            Log::error(sprintf('Sign-in history not written (%s): %s', $type, $e->getMessage()));
         }
     }
 

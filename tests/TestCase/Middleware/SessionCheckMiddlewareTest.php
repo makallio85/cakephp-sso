@@ -1,15 +1,15 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase\Middleware;
+namespace RockSoftware\Users\Test\TestCase\Middleware;
 
 use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
 use Cake\I18n\DateTime;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
-use Sso\Model\Table\SsoSettingsTable;
-use Sso\Session\SsoSession;
+use RockSoftware\Users\Model\Table\SettingsTable;
+use RockSoftware\Users\Session\SignInSession;
 
 /**
  * The plugin inserts SessionCheckMiddleware itself; /dashboard stands in for
@@ -20,10 +20,10 @@ class SessionCheckMiddlewareTest extends TestCase
     use IntegrationTestTrait;
 
     protected array $fixtures = [
-        'plugin.Sso.SsoSettings',
-        'plugin.Sso.SsoIdentities',
-        'plugin.Sso.SsoSessionEvents',
-        'plugin.Sso.Users',
+        'plugin.RockSoftware/Users.Settings',
+        'plugin.RockSoftware/Users.Identities',
+        'plugin.RockSoftware/Users.SessionEvents',
+        'plugin.RockSoftware/Users.Users',
     ];
 
     public function testCurrentSessionPasses(): void
@@ -45,7 +45,7 @@ class SessionCheckMiddlewareTest extends TestCase
 
         $this->get('/dashboard');
 
-        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertRedirect('https://app.example.test/auth');
         $this->assertFlashMessage('Your session has ended. Please sign in again.');
     }
 
@@ -57,13 +57,13 @@ class SessionCheckMiddlewareTest extends TestCase
 
         $this->get('/dashboard');
 
-        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertRedirect('https://app.example.test/auth');
     }
 
     public function testSessionThePluginDidNotEstablishIsLeftAlone(): void
     {
         // An application's own sign-in (a password form, a token) is its to
-        // manage: no Sso keys in the session, an identity the plugin may not
+        // manage: no plugin keys in the session, an identity the plugin may not
         // even recognise as a user.
         $user = $this->createUser();
         $this->session(['Auth' => $user]);
@@ -74,28 +74,12 @@ class SessionCheckMiddlewareTest extends TestCase
         $this->assertResponseOk();
     }
 
-    public function testLocalSessionIsNotEndedByAnOldTimestamp(): void
-    {
-        Configure::write('Sso.sessionsValidFromField', 'sessions_valid_from');
-        try {
-            $user = $this->createUser();
-            $this->session(['Auth' => $user]);
-            $this->endSessions(DateTime::now());
-
-            $this->get('/dashboard');
-
-            $this->assertResponseOk();
-        } finally {
-            Configure::write('Sso.sessionsValidFromField', null);
-        }
-    }
-
     public function testPasswordSessionEndsOncePasswordSignInIsTurnedOff(): void
     {
-        Configure::write('Sso.passwordSignIn', true);
+        Configure::write('RockSoftwareUsers.passwordSignIn', true);
         try {
             $user = $this->createUser();
-            $settings = $this->fetchTable('Sso.SsoSettings');
+            $settings = $this->fetchTable('RockSoftware/Users.Settings');
             $settings->store([
                 'issuer_url' => 'https://id.example.test/application/o/app/',
                 'client_id' => 'app-client',
@@ -110,7 +94,7 @@ class SessionCheckMiddlewareTest extends TestCase
             $settings->setPasswordSignIn(false, (int)$user->get('id'));
             $this->session(['Auth' => $user]);
             $this->get('/dashboard');
-            $this->assertRedirect('https://app.example.test/sso');
+            $this->assertRedirect('https://app.example.test/auth');
             $this->assertFlashMessage('Password sign-in has been turned off. Please sign in with Rock Software ID.');
 
             // A session signed in through the provider carries on.
@@ -118,14 +102,14 @@ class SessionCheckMiddlewareTest extends TestCase
             $this->get('/dashboard');
             $this->assertResponseOk();
         } finally {
-            Configure::write('Sso.passwordSignIn', false);
+            Configure::write('RockSoftwareUsers.passwordSignIn', false);
         }
     }
 
     public function testPasswordSessionIsLeftAloneInAnApplicationWithoutAPasswordForm(): void
     {
         $user = $this->createUser();
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $settings->store([
             'issuer_url' => 'https://id.example.test/application/o/app/',
             'client_id' => 'app-client',
@@ -148,7 +132,7 @@ class SessionCheckMiddlewareTest extends TestCase
 
         $this->get('/dashboard');
 
-        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertRedirect('https://app.example.test/auth');
     }
 
     public function testSessionStartedAfterBackchannelLogoutPasses(): void
@@ -164,7 +148,7 @@ class SessionCheckMiddlewareTest extends TestCase
 
     public function testAnonymousRequestToSignInPagePasses(): void
     {
-        $this->get('/sso');
+        $this->get('/auth');
 
         $this->assertResponseOk();
     }
@@ -180,7 +164,7 @@ class SessionCheckMiddlewareTest extends TestCase
 
         $this->signIn($user, time() - 9 * 3600);
         $this->get('/dashboard');
-        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertRedirect('https://app.example.test/auth');
         $this->assertFlashMessage('Your session has expired. Please sign in again.');
     }
 
@@ -188,24 +172,24 @@ class SessionCheckMiddlewareTest extends TestCase
     {
         $user = $this->createUser();
         $this->connect()->setSessionLimits(0, 30, 180);
-        $session = ['authenticated' => true, 'method' => SsoSession::METHOD_OIDC, 'establishedAt' => time() - 7200];
+        $session = ['authenticated' => true, 'method' => SignInSession::METHOD_OIDC, 'establishedAt' => time() - 7200];
 
-        $this->session(['Auth' => $user, 'Sso' => $session + ['lastSeenAt' => time() - 600]]);
+        $this->session(['Auth' => $user, 'RockSoftwareUsers' => $session + ['lastSeenAt' => time() - 600]]);
         $this->get('/dashboard');
         $this->assertResponseOk();
 
-        $this->session(['Auth' => $user, 'Sso' => $session + ['lastSeenAt' => time() - 3600]]);
+        $this->session(['Auth' => $user, 'RockSoftwareUsers' => $session + ['lastSeenAt' => time() - 3600]]);
         $this->get('/dashboard');
-        $this->assertRedirect('https://app.example.test/sso');
+        $this->assertRedirect('https://app.example.test/auth');
     }
 
     public function testLimitsAreOffUntilSet(): void
     {
         $user = $this->createUser();
         $this->connect();
-        $this->session(['Auth' => $user, 'Sso' => [
+        $this->session(['Auth' => $user, 'RockSoftwareUsers' => [
             'authenticated' => true,
-            'method' => SsoSession::METHOD_OIDC,
+            'method' => SignInSession::METHOD_OIDC,
             'establishedAt' => time() - 30 * 86400,
             'lastSeenAt' => time() - 7 * 86400,
         ]]);
@@ -217,30 +201,30 @@ class SessionCheckMiddlewareTest extends TestCase
 
     public function testThePluginsPasswordSessionEndsOncePasswordSignInIsTurnedOff(): void
     {
-        Configure::write('Sso.passwordSignIn', true);
+        Configure::write('RockSoftwareUsers.passwordSignIn', true);
         try {
             $user = $this->createUser();
-            $session = ['authenticated' => true, 'method' => SsoSession::METHOD_PASSWORD, 'establishedAt' => time()];
-            $this->session(['Auth' => $user, 'Sso' => $session]);
+            $session = ['authenticated' => true, 'method' => SignInSession::METHOD_PASSWORD, 'establishedAt' => time()];
+            $this->session(['Auth' => $user, 'RockSoftwareUsers' => $session]);
             $this->get('/dashboard');
             $this->assertResponseOk();
 
             $this->connect()->setPasswordSignIn(false, (int)$user->get('id'));
-            $this->session(['Auth' => $user, 'Sso' => $session]);
+            $this->session(['Auth' => $user, 'RockSoftwareUsers' => $session]);
             $this->get('/dashboard');
-            $this->assertRedirect('https://app.example.test/sso');
+            $this->assertRedirect('https://app.example.test/auth');
         } finally {
-            Configure::write('Sso.passwordSignIn', false);
+            Configure::write('RockSoftwareUsers.passwordSignIn', false);
         }
     }
 
     /**
-     * @return \Sso\Model\Table\SsoSettingsTable
+     * @return \RockSoftware\Users\Model\Table\SettingsTable
      */
-    private function connect(): SsoSettingsTable
+    private function connect(): SettingsTable
     {
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $settings->store([
             'issuer_url' => 'https://id.example.test/application/o/app/',
             'client_id' => 'app-client',
@@ -259,11 +243,11 @@ class SessionCheckMiddlewareTest extends TestCase
         $users = $this->fetchTable('Users');
         $user = $users->saveOrFail($users->newEntity([
             'email' => 'person@example.test',
-            'password' => '!sso:x',
+            'password' => '!rsu:x',
             'name' => 'Person',
             'is_active' => true,
         ], ['accessibleFields' => ['*' => true], 'validate' => false]));
-        $identities = $this->fetchTable('Sso.SsoIdentities');
+        $identities = $this->fetchTable('RockSoftware/Users.Identities');
         $identities->saveOrFail($identities->newEntity(
             ['user_id' => $user->id, 'external_id' => 'subject-9'],
             ['accessibleFields' => ['*' => true]],
@@ -280,7 +264,7 @@ class SessionCheckMiddlewareTest extends TestCase
      */
     private function endSessions(DateTime $from): void
     {
-        $identities = $this->fetchTable('Sso.SsoIdentities');
+        $identities = $this->fetchTable('RockSoftware/Users.Identities');
         $identity = $identities->findByExternalId('subject-9');
         $this->assertNotNull($identity);
         $identity->set('sessions_valid_from', $from);
@@ -294,10 +278,10 @@ class SessionCheckMiddlewareTest extends TestCase
      */
     private function signIn(EntityInterface $user, int $establishedAt): void
     {
-        // SsoSession's keys are dotted paths under `Sso`.
+        // SignInSession's keys are dotted paths under `RockSoftwareUsers`.
         $this->session([
             'Auth' => $user,
-            'Sso' => ['authenticated' => true, 'method' => SsoSession::METHOD_OIDC, 'establishedAt' => $establishedAt],
+            'RockSoftwareUsers' => ['authenticated' => true, 'method' => SignInSession::METHOD_OIDC, 'establishedAt' => $establishedAt],
         ]);
     }
 }
