@@ -6,11 +6,14 @@ namespace Sso\Test\TestCase\Controller;
 use Cake\Cache\Cache;
 use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
+use Cake\Event\EventManager;
 use Cake\Http\Client;
 use Cake\Http\TestSuite\HttpClientTrait;
 use Cake\I18n\DateTime;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use Sso\Controller\SettingsController;
+use Sso\Session\SsoSession;
 use Sso\SsoPlugin;
 
 class SettingsControllerTest extends TestCase
@@ -273,6 +276,112 @@ class SettingsControllerTest extends TestCase
         $this->assertResponseNotContains('Connection by Rock Software ID');
     }
 
+    public function testPasswordSwitchOnlyWhereTheApplicationHasAPasswordForm(): void
+    {
+        $admin = $this->createUser('admin@example.test');
+        $this->connect(self::GOOD);
+        $this->signInThroughProvider($admin);
+        $this->get('/sso/settings');
+        $this->assertResponseNotContains('Password sign-in');
+
+        Configure::write('Sso.passwordSignIn', true);
+        try {
+            $this->signInThroughProvider($admin);
+            $this->get('/sso/settings');
+            $this->assertResponseContains('Turn password sign-in off');
+        } finally {
+            Configure::write('Sso.passwordSignIn', false);
+        }
+    }
+
+    public function testPasswordSignInIsAllowedBeforeAnyConnection(): void
+    {
+        $this->assertTrue($this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed());
+    }
+
+    public function testTurningPasswordSignInOffAndOn(): void
+    {
+        Configure::write('Sso.passwordSignIn', true);
+        $events = [];
+        EventManager::instance()->on(SettingsController::EVENT_PASSWORD_SIGN_IN_CHANGED, function ($event) use (&$events): void {
+            $events[] = $event->getData('enabled');
+        });
+        try {
+            $admin = $this->createUser('admin@example.test');
+            $this->connect(self::GOOD);
+            $settings = $this->fetchTable('Sso.SsoSettings');
+
+            $this->signInThroughProvider($admin);
+            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
+            $this->assertRedirect('/sso/settings');
+            $this->assertFalse($settings->passwordSignInAllowed());
+            $this->assertSame($admin->id, $settings->current()->password_sign_in_changed_by);
+            $this->assertSame($admin->id, $this->fetchTable('Sso.SsoSettingChanges')->latest()?->user_id);
+
+            $this->signInThroughProvider($admin);
+            $this->get('/sso/settings');
+            $this->assertResponseContains('Turn password sign-in on');
+            $this->assertResponseContains('Password sign-in turned off by Admin');
+
+            // Back on works from any session allowed on the page.
+            $this->signIn($admin);
+            $this->post('/sso/settings/password-sign-in', ['enabled' => '1']);
+            $this->assertTrue($settings->passwordSignInAllowed());
+            $this->assertSame([false, true], $events);
+        } finally {
+            Configure::write('Sso.passwordSignIn', false);
+            EventManager::instance()->off(SettingsController::EVENT_PASSWORD_SIGN_IN_CHANGED);
+        }
+    }
+
+    public function testPasswordSignInCannotBeTurnedOffFromAPasswordOrEmergencySession(): void
+    {
+        Configure::write('Sso.passwordSignIn', true);
+        try {
+            $admin = $this->createUser('admin@example.test');
+            $this->connect(self::GOOD);
+            $settings = $this->fetchTable('Sso.SsoSettings');
+
+            // A password session: no Sso keys at all.
+            $this->session(['Auth' => $admin]);
+            $this->get('/sso/settings');
+            $this->assertResponseContains('sign in through Rock Software ID first');
+            $this->session(['Auth' => $admin]);
+            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
+            $this->assertTrue($settings->passwordSignInAllowed());
+
+            // An emergency link.
+            $this->session([
+                'Auth' => $admin,
+                'Sso' => ['authenticated' => true, 'method' => SsoSession::METHOD_EMERGENCY, 'establishedAt' => time()],
+            ]);
+            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
+            $this->assertTrue($settings->passwordSignInAllowed());
+        } finally {
+            Configure::write('Sso.passwordSignIn', false);
+        }
+    }
+
+    public function testPasswordSignInStaysOnWhenTheServerDoesNotAnswer(): void
+    {
+        Configure::write('Sso.passwordSignIn', true);
+        try {
+            $admin = $this->createUser('admin@example.test');
+            $this->connect(self::MISSING);
+
+            $this->signInThroughProvider($admin);
+            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
+
+            $this->assertTrue($this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed());
+            $this->assertFlashMessage(
+                'Password sign-in stays on: the identity server does not answer. ' .
+                'https://id.example.test/application/o/apq/.well-known/openid-configuration answered 404.',
+            );
+        } finally {
+            Configure::write('Sso.passwordSignIn', false);
+        }
+    }
+
     public function testAllowProvisioningNeedsPostAndAccess(): void
     {
         $settings = $this->fetchTable('Sso.SsoSettings');
@@ -300,6 +409,28 @@ class SettingsControllerTest extends TestCase
      * @param string $email Email address.
      * @return \Cake\Datasource\EntityInterface
      */
+    private function connect(string $issuer): void
+    {
+        $this->fetchTable('Sso.SsoSettings')->store([
+            'issuer_url' => $issuer,
+            'client_id' => 'app-client',
+            'client_secret' => 'the-secret',
+            'is_enabled' => true,
+        ]);
+    }
+
+    /**
+     * @param \Cake\Datasource\EntityInterface $user The user.
+     * @return void
+     */
+    private function signInThroughProvider(EntityInterface $user): void
+    {
+        $this->session([
+            'Auth' => $user,
+            'Sso' => ['authenticated' => true, 'method' => SsoSession::METHOD_OIDC, 'establishedAt' => time()],
+        ]);
+    }
+
     private function createUser(string $email): EntityInterface
     {
         $users = $this->fetchTable('Users');
