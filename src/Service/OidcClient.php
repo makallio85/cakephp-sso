@@ -183,6 +183,35 @@ class OidcClient
     }
 
     /**
+     * Verifies a provisioning token and returns its claims: one the identity
+     * provider issued through token exchange for this client (issuer and
+     * audience checked by `decode()`), to the given subject, recently, with an
+     * id the caller records so it is accepted once.
+     *
+     * @param string $token The bearer token.
+     * @param string $subject The `preferred_username` it must be issued to.
+     * @param int $maxAge Seconds since `iat` it is accepted for.
+     * @return array<string, mixed>
+     */
+    public function validateProvisioningToken(string $token, string $subject, int $maxAge): array
+    {
+        $claims = $this->decode($token);
+
+        if (($claims['preferred_username'] ?? null) !== $subject) {
+            throw new SsoException('The provisioning token was issued to a different account.');
+        }
+        $issuedAt = $claims['iat'] ?? null;
+        if (!is_int($issuedAt) || $issuedAt < time() - $maxAge - self::LEEWAY_SECONDS) {
+            throw new SsoException('The provisioning token is too old.');
+        }
+        if (!is_string($claims['jti'] ?? null) || $claims['jti'] === '' || strlen($claims['jti']) > 190) {
+            throw new SsoException('The provisioning token has no usable id.');
+        }
+
+        return $claims;
+    }
+
+    /**
      * Where to send the browser to end the provider session, or null when the
      * provider publishes no end-session endpoint.
      *

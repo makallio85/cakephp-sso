@@ -31,6 +31,9 @@ msgstr "Tunnistuspalvelun osoite"
 msgid "Last changed by {0}, {1}."
 msgstr "Viimeksi muuttanut {0}, {1}."
 
+msgid "Connected by Rock Software ID, {0}."
+msgstr "Yhdistetty Rock Software ID:stä, {0}."
+
 msgid "Not configured yet. Enter the connection below; it is saved once the server answers."
 msgstr "Ei vielä määritetty. Anna yhteystiedot alla; ne tallennetaan, kun palvelin vastaa."
 
@@ -123,3 +126,6 @@ msgstr "Istuntosi on päättynyt. Kirjaudu uudelleen."
 
 msgid "a removed user"
 msgstr "poistettu käyttäjä"
+
+msgid "Rock Software ID may connect this application during the next hour."
+msgstr "Rock Software ID voi yhdistää tämän sovelluksen seuraavan tunnin aikana."

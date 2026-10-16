@@ -74,6 +74,7 @@ secret.
 | `requireSignIn` | `'auto'` | Require sign-in everywhere when the plugin provides authentication; `true`/`false` force it |
 | `loginUrl` | `'/sso'` | The sign-in page |
 | `cacheConfig` | `'default'` | Cache for the provider's discovery document and keys |
+| `provisioning` | see below | `POST /sso/provision`; `false` switches it off |
 
 An application with its own `AuthenticationMiddleware` keeps it, and keeps deciding which
 of its pages are public; point its `unauthenticatedRedirect` at `/sso`.
@@ -93,6 +94,7 @@ of its pages are public; point its `unauthenticatedRedirect` at `/sso`.
   | `Sso.afterLogin` | `user`, `claims`, `method` | Audit log |
   | `Sso.beforeLogout` | `user` | Audit log |
   | `Sso.backchannelLogout` | `user` | Audit log |
+  | `Sso.provisioned` | `issuer`, `clientId`, `requiredGroup` | Audit log; tell the administrators |
 
 - **Own second factor.** Skip it when `\Sso\Session\SsoSession::isSsoSession($session)`
   is true: the provider already required a second factor.
@@ -108,7 +110,30 @@ until then the plugin keeps them in step when `sessionsValidFromField` /
 
 ## Connecting to the provider
 
-Register the application in Authentik's admin UI (the steps are in
+`new-id-app.sh` in infra-docs registers the application in Rock Software ID and pushes
+the connection to `POST /sso/provision`, so nothing is typed into the application. The
+design is in [rocksoftware-identity#5](https://github.com/makallio85/rocksoftware-identity/issues/5),
+*Connecting applications automatically*.
+
+The request carries the issuer, client ID, client secret and required group, and a
+bearer token the provider issued through token exchange for that client. The plugin
+accepts it only when:
+
+- the application has no connection yet, or an administrator pressed *Allow Rock
+  Software ID to connect again* on `/sso/settings` within the last hour; every
+  provisioning closes it again;
+- the issuer is directly under `provisioning.issuerPrefix`
+  (`https://id.rocksoftware.fi/application/o/`), checked before anything is fetched,
+  and the provider's keys are on the same host;
+- the token is signed with that issuer's key, its `iss` and `aud` equal the issuer and
+  client ID it delivers, it was issued to `provisioning.subject` (`onboarding`) at most
+  `provisioning.maxAge` (300) seconds ago, and its `jti` was never used before.
+
+Any refusal is a bare 401 (400 for a malformed request, 429 over
+`provisioning.rateLimit` per `provisioning.rateWindow`), with the reason in the log and
+never the request body. Each provisioning is kept in `sso_provisionings`.
+
+By hand, register the application in Authentik's admin UI (the steps are in
 [rocksoftware-identity#5](https://github.com/makallio85/rocksoftware-identity/issues/5)),
 then enter the issuer, client ID, secret and required group on `/sso/settings`, or in
 the application container:

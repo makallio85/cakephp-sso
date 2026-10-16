@@ -8,6 +8,7 @@ use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
 use Cake\Http\Client;
 use Cake\Http\TestSuite\HttpClientTrait;
+use Cake\I18n\DateTime;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
@@ -23,6 +24,7 @@ class SettingsControllerTest extends TestCase
     protected array $fixtures = [
         'plugin.Sso.SsoSettings',
         'plugin.Sso.SsoSettingChanges',
+        'plugin.Sso.SsoProvisionings',
         'plugin.Sso.Users',
     ];
 
@@ -203,6 +205,53 @@ class SettingsControllerTest extends TestCase
 
         $this->get('/sso/settings/update');
         $this->assertRedirect('/sso/settings');
+    }
+
+    public function testAllowProvisioningOpensAnHourAndIsRecorded(): void
+    {
+        $admin = $this->createUser('admin@example.test');
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings->store([
+            'issuer_url' => self::GOOD,
+            'client_id' => 'app-client',
+            'client_secret' => 'the-secret',
+            'is_enabled' => true,
+        ]);
+        $this->assertFalse($settings->provisioningOpen());
+
+        $this->signIn($admin);
+        $this->enableCsrfToken();
+        $this->post('/sso/settings/allow-provisioning');
+
+        $this->assertRedirect('/sso/settings');
+        $this->assertTrue($settings->provisioningOpen());
+        $until = $settings->current()->provisioning_open_until;
+        $this->assertTrue($until->greaterThan(DateTime::now()->addMinutes(59)));
+        $this->assertTrue($until->lessThanOrEquals(DateTime::now()->addMinutes(60)));
+        $this->assertSame($admin->id, $this->fetchTable('Sso.SsoSettingChanges')->latest()?->user_id);
+    }
+
+    public function testAllowProvisioningNeedsPostAndAccess(): void
+    {
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings->store([
+            'issuer_url' => self::GOOD,
+            'client_id' => 'app-client',
+            'client_secret' => 'the-secret',
+            'is_enabled' => true,
+        ]);
+        $this->signIn($this->createUser('admin@example.test'));
+
+        $this->get('/sso/settings/allow-provisioning');
+        $this->assertRedirect('/sso/settings');
+        $this->assertFalse($settings->provisioningOpen());
+
+        Configure::write('Sso.settingsAccess', fn($identity): bool => false);
+        $this->enableCsrfToken();
+        $this->post('/sso/settings/allow-provisioning');
+        Configure::write('Sso.settingsAccess', null);
+        $this->assertResponseCode(403);
+        $this->assertFalse($settings->provisioningOpen());
     }
 
     /**

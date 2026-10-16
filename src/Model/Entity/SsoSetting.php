@@ -17,6 +17,7 @@ use Cake\ORM\Entity;
  * @property string $client_secret
  * @property string|null $required_group
  * @property bool $is_enabled
+ * @property \Cake\I18n\DateTime|null $provisioning_open_until
  * @property \Cake\I18n\DateTime $created
  * @property \Cake\I18n\DateTime $modified
  */
@@ -31,6 +32,7 @@ class SsoSetting extends Entity
         'client_secret' => true,
         'required_group' => true,
         'is_enabled' => true,
+        'provisioning_open_until' => true,
     ];
 
     /**
