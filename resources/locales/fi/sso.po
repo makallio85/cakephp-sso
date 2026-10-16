@@ -144,3 +144,39 @@ msgstr "Suljettu. Rock Software ID ei voi muuttaa tätä yhteyttä. Avaa se tunn
 
 msgid "Allow Rock Software ID to connect again"
 msgstr "Salli Rock Software ID:n yhdistää uudelleen"
+
+msgid "Password sign-in"
+msgstr "Kirjautuminen salasanalla"
+
+msgid "Off. Only Rock Software ID signs people in. Turning it back on lets everyone use their password again at once."
+msgstr "Pois päältä. Vain Rock Software ID kirjaa ihmiset sisään. Kun sen kytkee takaisin päälle, kaikki voivat heti taas käyttää salasanaansa."
+
+msgid "On. People can also sign in with this application's own email and password. Turn it off once everyone has signed in through Rock Software ID once."
+msgstr "Päällä. Ihmiset voivat kirjautua myös tämän sovelluksen omalla sähköpostilla ja salasanalla. Kytke se pois, kun jokainen on kirjautunut kerran Rock Software ID:llä."
+
+msgid "On. To turn it off, sign in through Rock Software ID first, so nobody can lock themselves out."
+msgstr "Päällä. Kirjaudu ensin Rock Software ID:llä, jotta voit kytkeä sen pois – näin kukaan ei lukitse itseään ulos."
+
+msgid "Turn password sign-in off"
+msgstr "Kytke salasanakirjautuminen pois"
+
+msgid "Turn password sign-in on"
+msgstr "Kytke salasanakirjautuminen päälle"
+
+msgid "Password sign-in turned on by {0}, {1}."
+msgstr "Salasanakirjautumisen kytki päälle {0}, {1}."
+
+msgid "Password sign-in turned off by {0}, {1}."
+msgstr "Salasanakirjautumisen kytki pois {0}, {1}."
+
+msgid "Password sign-in stays on. Sign in through Rock Software ID first, so nobody can lock themselves out."
+msgstr "Salasanakirjautuminen jää päälle. Kirjaudu ensin Rock Software ID:llä, jotta kukaan ei lukitse itseään ulos."
+
+msgid "Password sign-in stays on: the identity server does not answer. {0}"
+msgstr "Salasanakirjautuminen jää päälle: tunnistuspalvelin ei vastaa. {0}"
+
+msgid "Password sign-in is on. People can sign in with their password again."
+msgstr "Salasanakirjautuminen on päällä. Ihmiset voivat taas kirjautua salasanallaan."
+
+msgid "Password sign-in is off. Only Rock Software ID signs people in."
+msgstr "Salasanakirjautuminen on pois päältä. Vain Rock Software ID kirjaa ihmiset sisään."

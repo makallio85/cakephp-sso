@@ -38,7 +38,8 @@ use Sso\Service\AuthenticationServiceProvider;
  * - `POST /sso/backchannel-logout` — the provider's back-channel logout URI
  * - `POST /sso/provision` — the provider hands the application its connection
  * - `GET|POST /sso/emergency/{token}` — single-use emergency sign-in
- * - `GET /sso/settings` (+ `POST update`, `POST test`, `POST allow-provisioning`) —
+ * - `GET /sso/settings` (+ `POST update`, `POST test`, `POST allow-provisioning`,
+ *   `POST password-sign-in`) —
  *   Settings › Identity provider
  */
 class SsoPlugin extends BasePlugin
@@ -71,6 +72,10 @@ class SsoPlugin extends BasePlugin
      *   keep in step as well (1.1 applications); the plugin's own are in
      *   `sso_identities`.
      * - `cacheConfig`: the cache for the provider's discovery document and keys.
+     * - `passwordSignIn`: `true` when the application has a password form of
+     *   its own beside the identity provider. The settings page then offers
+     *   to turn it off and on; the application reads the switch with
+     *   `SsoSettingsTable::passwordSignInAllowed()` and enforces it.
      * - `provisioning`: `POST /sso/provision`, or `false` to switch it off.
      *   `issuerPrefix` is the trust anchor: only issuers directly under it are
      *   accepted, and nothing is fetched from anywhere else. `subject` is the
@@ -94,6 +99,7 @@ class SsoPlugin extends BasePlugin
         'sessionsValidFromField' => null,
         'lastLoginField' => null,
         'cacheConfig' => 'default',
+        'passwordSignIn' => false,
         'provisioning' => [
             'issuerPrefix' => 'https://id.rocksoftware.fi/application/o/',
             'subject' => 'onboarding',
@@ -192,6 +198,10 @@ class SsoPlugin extends BasePlugin
             $builder->connect('/settings', ['controller' => 'Settings', 'action' => 'index']);
             $builder->connect('/settings/update', ['controller' => 'Settings', 'action' => 'update']);
             $builder->connect('/settings/test', ['controller' => 'Settings', 'action' => 'test']);
+            $builder->connect(
+                '/settings/password-sign-in',
+                ['controller' => 'Settings', 'action' => 'passwordSignIn'],
+            );
             $builder->connect(
                 '/settings/allow-provisioning',
                 ['controller' => 'Settings', 'action' => 'allowProvisioning'],

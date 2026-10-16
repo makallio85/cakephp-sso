@@ -18,6 +18,9 @@ use Cake\ORM\Entity;
  * @property string|null $required_group
  * @property bool $is_enabled
  * @property \Cake\I18n\DateTime|null $provisioning_open_until
+ * @property bool $password_sign_in_enabled
+ * @property int|null $password_sign_in_changed_by
+ * @property \Cake\I18n\DateTime|null $password_sign_in_changed_at
  * @property \Cake\I18n\DateTime $created
  * @property \Cake\I18n\DateTime $modified
  */
@@ -33,6 +36,9 @@ class SsoSetting extends Entity
         'required_group' => true,
         'is_enabled' => true,
         'provisioning_open_until' => true,
+        'password_sign_in_enabled' => true,
+        'password_sign_in_changed_by' => true,
+        'password_sign_in_changed_at' => true,
     ];
 
     /**
