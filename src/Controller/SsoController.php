@@ -16,6 +16,7 @@ use Cake\Routing\Router;
 use Sso\Model\Entity\SsoSetting;
 use Sso\Service\BackchannelLogout;
 use Sso\Service\OidcClient;
+use Sso\Service\Provisioning;
 use Sso\Service\SsoException;
 use Sso\Service\UserProvisioner;
 use Sso\Session\SsoSession;
@@ -235,6 +236,30 @@ class SsoController extends Controller
         // that exempts the path itself.
         $this->getRequest()->allowMethod(['post']);
         $status = (new BackchannelLogout())->handle($this->getRequest()->getData('logout_token'));
+
+        return $this->getResponse()->withHeader('Cache-Control', 'no-store')->withStatus($status);
+    }
+
+    /**
+     * Receives the connection the provider hands over. ProvisionMiddleware
+     * answers it before CSRF and sign-in; the route exists so routing lets the
+     * request reach that middleware, and this action serves an application
+     * whose queue lacks it.
+     *
+     * @return \Cake\Http\Response
+     */
+    public function provision(): Response
+    {
+        if (Provisioning::config() === null) {
+            return $this->getResponse()->withStatus(404);
+        }
+        $this->getRequest()->allowMethod(['post']);
+        $request = $this->getRequest();
+        $status = (new Provisioning())->handle(
+            $request->getHeaderLine('Authorization'),
+            (string)$request->getBody(),
+            $request->clientIp(),
+        );
 
         return $this->getResponse()->withHeader('Cache-Control', 'no-store')->withStatus($status);
     }

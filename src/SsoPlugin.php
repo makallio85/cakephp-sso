@@ -18,6 +18,7 @@ use Psr\Http\Server\MiddlewareInterface;
 use Sso\Command\ConfigureCommand;
 use Sso\Command\EmergencyLoginCommand;
 use Sso\Middleware\BackchannelLogoutMiddleware;
+use Sso\Middleware\ProvisionMiddleware;
 use Sso\Middleware\RequireSignInMiddleware;
 use Sso\Middleware\SessionCheckMiddleware;
 use Sso\Service\AuthenticationServiceProvider;
@@ -35,12 +36,16 @@ use Sso\Service\AuthenticationServiceProvider;
  * - `GET /sso/callback` — the redirect URI registered at the provider
  * - `GET|POST /sso/logout` — sign out here and at the provider
  * - `POST /sso/backchannel-logout` — the provider's back-channel logout URI
+ * - `POST /sso/provision` — the provider hands the application its connection
  * - `GET|POST /sso/emergency/{token}` — single-use emergency sign-in
- * - `GET /sso/settings` (+ `POST update`, `POST test`) — Settings › Identity provider
+ * - `GET /sso/settings` (+ `POST update`, `POST test`, `POST allow-provisioning`) —
+ *   Settings › Identity provider
  */
 class SsoPlugin extends BasePlugin
 {
     public const BACKCHANNEL_LOGOUT_PATH = '/sso/backchannel-logout';
+
+    public const PROVISION_PATH = '/sso/provision';
 
     /**
      * Every setting and its default. An application overrides any of them in
@@ -66,6 +71,11 @@ class SsoPlugin extends BasePlugin
      *   keep in step as well (1.1 applications); the plugin's own are in
      *   `sso_identities`.
      * - `cacheConfig`: the cache for the provider's discovery document and keys.
+     * - `provisioning`: `POST /sso/provision`, or `false` to switch it off.
+     *   `issuerPrefix` is the trust anchor: only issuers directly under it are
+     *   accepted, and nothing is fetched from anywhere else. `subject` is the
+     *   account the token must be issued to, `maxAge` how many seconds after
+     *   issue it is accepted, `rateLimit` requests per `rateWindow` seconds.
      *
      * @var array<string, mixed>
      */
@@ -84,6 +94,13 @@ class SsoPlugin extends BasePlugin
         'sessionsValidFromField' => null,
         'lastLoginField' => null,
         'cacheConfig' => 'default',
+        'provisioning' => [
+            'issuerPrefix' => 'https://id.rocksoftware.fi/application/o/',
+            'subject' => 'onboarding',
+            'maxAge' => 300,
+            'rateLimit' => 10,
+            'rateWindow' => 900,
+        ],
     ];
 
     protected ?string $name = 'Sso';
@@ -126,10 +143,13 @@ class SsoPlugin extends BasePlugin
         // The back-channel logout is a signed server-to-server POST with no
         // CSRF token; answering it before the CSRF middleware means the
         // application needs no exemption.
-        if (self::queueHas($middlewareQueue, CsrfProtectionMiddleware::class)) {
-            $middlewareQueue->insertBefore(CsrfProtectionMiddleware::class, new BackchannelLogoutMiddleware());
-        } else {
-            self::insertAfterFirst($middlewareQueue, [RoutingMiddleware::class], new BackchannelLogoutMiddleware());
+        // Provisioning is authorised by its bearer token in the same way.
+        foreach ([new BackchannelLogoutMiddleware(), new ProvisionMiddleware()] as $tokenEndpoint) {
+            if (self::queueHas($middlewareQueue, CsrfProtectionMiddleware::class)) {
+                $middlewareQueue->insertBefore(CsrfProtectionMiddleware::class, $tokenEndpoint);
+            } else {
+                self::insertAfterFirst($middlewareQueue, [RoutingMiddleware::class], $tokenEndpoint);
+            }
         }
 
         $providesAuthentication = self::providesAuthentication($middlewareQueue);
@@ -165,12 +185,17 @@ class SsoPlugin extends BasePlugin
             $builder->connect('/callback', ['controller' => 'Sso', 'action' => 'callback']);
             $builder->connect('/logout', ['controller' => 'Sso', 'action' => 'logout']);
             $builder->connect('/backchannel-logout', ['controller' => 'Sso', 'action' => 'backchannelLogout']);
+            $builder->connect('/provision', ['controller' => 'Sso', 'action' => 'provision']);
             $builder->connect('/emergency/{token}', ['controller' => 'Sso', 'action' => 'emergency'])
                 ->setPass(['token'])
                 ->setPatterns(['token' => '[0-9a-f]{64}']);
             $builder->connect('/settings', ['controller' => 'Settings', 'action' => 'index']);
             $builder->connect('/settings/update', ['controller' => 'Settings', 'action' => 'update']);
             $builder->connect('/settings/test', ['controller' => 'Settings', 'action' => 'test']);
+            $builder->connect(
+                '/settings/allow-provisioning',
+                ['controller' => 'Settings', 'action' => 'allowProvisioning'],
+            );
         });
     }
 
@@ -186,15 +211,17 @@ class SsoPlugin extends BasePlugin
     }
 
     /**
-     * Whether a request is the provider's back-channel logout. 1.1 applications
-     * exempt it from CSRF with this; 1.2 answers it before CSRF itself.
+     * Whether a request is one the provider makes with a signed token instead
+     * of a CSRF token: the back-channel logout or provisioning. 1.1
+     * applications exempt it from CSRF with this; 1.2 answers both before CSRF
+     * itself.
      *
      * @param \Psr\Http\Message\ServerRequestInterface $request The request.
      * @return bool
      */
     public static function isCsrfExempt(ServerRequestInterface $request): bool
     {
-        return $request->getUri()->getPath() === self::BACKCHANNEL_LOGOUT_PATH;
+        return in_array($request->getUri()->getPath(), [self::BACKCHANNEL_LOGOUT_PATH, self::PROVISION_PATH], true);
     }
 
     /**

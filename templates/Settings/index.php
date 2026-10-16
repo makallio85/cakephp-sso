@@ -11,6 +11,9 @@
  * @var string $callbackUrl
  * @var \Sso\Model\Entity\SsoSettingChange|null $lastChange
  * @var string|null $lastChangedBy
+ * @var \Sso\Model\Entity\SsoProvisioning|null $lastProvisioning
+ * @var bool $provisioningEnabled
+ * @var \Cake\I18n\DateTime|null $provisioningOpenUntil
  */
 $this->assign('title', __d('sso', 'Identity provider'));
 ?>
@@ -98,7 +101,44 @@ $this->assign('title', __d('sso', 'Identity provider'));
         </div>
     </div>
 
-    <?php if ($lastChange !== null) : ?>
+    <?php if ($provisioningEnabled) : ?>
+        <?php $windowOpen = $provisioningOpenUntil !== null && $provisioningOpenUntil->isFuture(); ?>
+        <?php if (!$configured) : ?>
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-body p-3 p-md-4">
+                    <div class="fw-semibold mb-1"><?= __d('sso', 'Connection by Rock Software ID') ?></div>
+                    <div class="small text-body-secondary"><?= __d('sso', 'Waiting. Rock Software ID connects this application when its administrator runs new-id-app.sh; nothing needs to be typed here.') ?></div>
+                </div>
+            </div>
+        <?php elseif ($windowOpen) : ?>
+            <div class="card border border-warning bg-warning-subtle mt-3">
+                <div class="card-body p-3 p-md-4">
+                    <div class="fw-semibold mb-1"><?= __d('sso', 'Connection by Rock Software ID') ?></div>
+                    <div class="small"><?= __d('sso', 'Open until {0}. Run new-id-app.sh now; the connection it sends closes this again.', h($this->Time->format($provisioningOpenUntil, 'HH.mm'))) ?></div>
+                </div>
+            </div>
+        <?php else : ?>
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-body p-3 p-md-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div style="flex: 1 1 420px">
+                        <div class="fw-semibold mb-1"><?= __d('sso', 'Connection by Rock Software ID') ?></div>
+                        <div class="small text-body-secondary"><?= __d('sso', 'Closed. Rock Software ID cannot change this connection. Open it for an hour to set a new client secret or client; the next connection closes it again.') ?></div>
+                    </div>
+                    <?= $this->Form->postButton(
+                        __d('sso', 'Allow Rock Software ID to connect again'),
+                        ['plugin' => 'Sso', 'controller' => 'Settings', 'action' => 'allowProvisioning'],
+                        ['class' => 'btn btn-outline-primary'],
+                    ) ?>
+                </div>
+            </div>
+        <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($lastProvisioning !== null && ($lastChange === null || $lastProvisioning->created >= $lastChange->created)) : ?>
+        <p class="small text-body-secondary mt-3 mb-0">
+            <?= __d('sso', 'Connected by Rock Software ID, {0}.', h($this->Time->format($lastProvisioning->created, 'd.M.yyyy HH.mm'))) ?>
+        </p>
+    <?php elseif ($lastChange !== null) : ?>
         <p class="small text-body-secondary mt-3 mb-0">
             <?= __d('sso', 'Last changed by {0}, {1}.', h($lastChangedBy ?? __d('sso', 'a removed user')), h($this->Time->format($lastChange->created, 'd.M.yyyy HH.mm'))) ?>
         </p>

@@ -26,7 +26,7 @@ class BackchannelLogoutMiddleware implements MiddlewareInterface
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if (!SsoPlugin::isCsrfExempt($request)) {
+        if ($request->getUri()->getPath() !== SsoPlugin::BACKCHANNEL_LOGOUT_PATH) {
             return $handler->handle($request);
         }
         if ($request->getMethod() !== 'POST') {
