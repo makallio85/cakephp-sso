@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Command;
+namespace RockSoftware\Users\Command;
 
 use Cake\Command\Command;
 use Cake\Console\Arguments;
@@ -22,7 +22,7 @@ class StatusCommand extends Command
      */
     public static function defaultName(): string
     {
-        return 'sso status';
+        return 'rock_software_users status';
     }
 
     /**
@@ -41,8 +41,8 @@ class StatusCommand extends Command
      */
     public function execute(Arguments $args, ConsoleIo $io): int
     {
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $setting = $settings->current();
 
         $io->out((string)json_encode([

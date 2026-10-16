@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Middleware;
+namespace RockSoftware\Users\Middleware;
 
 use Cake\Core\Configure;
 use Cake\Http\Response;
@@ -13,7 +13,7 @@ use Psr\Http\Server\RequestHandlerInterface;
 
 /**
  * Every page needs a signed-in session, except the sign-in routes
- * (`SIGN_IN_PATHS`) and `Sso.publicPaths`. The settings page is not one of
+ * (`SIGN_IN_PATHS`) and `RockSoftwareUsers.publicPaths`. The settings page is not one of
  * them. Added by the plugin when it provides the
  * application's authentication, so an application protects its pages without a
  * line of code.
@@ -26,15 +26,15 @@ class RequireSignInMiddleware implements MiddlewareInterface
      * @var list<string>
      */
     public const SIGN_IN_PATHS = [
-        '/sso',
-        '/sso/login',
-        '/sso/password',
-        '/sso/callback',
-        '/sso/logout',
-        '/sso/backchannel-logout',
-        '/sso/provision',
-        '/sso/client-metadata',
-        '/sso/emergency/*',
+        '/auth',
+        '/auth/start',
+        '/auth/password',
+        '/auth/callback',
+        '/auth/sign-out',
+        '/auth/backchannel-logout',
+        '/auth/provision',
+        '/auth/client-metadata',
+        '/auth/emergency/*',
     ];
 
     /**
@@ -58,7 +58,7 @@ class RequireSignInMiddleware implements MiddlewareInterface
 
         $query = $request->getUri()->getQuery();
         $redirect = $path . ($query !== '' ? '?' . $query : '');
-        $url = Router::url(Configure::read('Sso.loginUrl'), true);
+        $url = Router::url(Configure::read('RockSoftwareUsers.signInUrl'), true);
         $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query(['redirect' => $redirect]);
 
         return (new Response())->withStatus(302)->withLocation($url);
@@ -70,7 +70,7 @@ class RequireSignInMiddleware implements MiddlewareInterface
      */
     public static function isPublic(string $path): bool
     {
-        $patterns = array_merge(self::SIGN_IN_PATHS, (array)Configure::read('Sso.publicPaths', []));
+        $patterns = array_merge(self::SIGN_IN_PATHS, (array)Configure::read('RockSoftwareUsers.publicPaths', []));
         foreach ($patterns as $pattern) {
             if (is_string($pattern) && fnmatch($pattern, $path)) {
                 return true;

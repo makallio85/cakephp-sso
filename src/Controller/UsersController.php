@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Controller;
+namespace RockSoftware\Users\Controller;
 
 use ArrayObject;
 use Cake\Core\Configure;
@@ -13,33 +13,33 @@ use Cake\Http\Exception\ForbiddenException;
 use Cake\Http\Exception\NotFoundException;
 use Cake\Http\Response;
 use Cake\ORM\Table;
-use Sso\Model\Entity\SsoSessionEventType;
-use Sso\Service\SignInHistory;
-use Sso\Service\UserProvisioner;
+use RockSoftware\Users\Model\Entity\SessionEventType;
+use RockSoftware\Users\Service\SignInHistory;
+use RockSoftware\Users\Service\UserProvisioner;
 
 /**
  * The users page: who may use the application, how they last signed in, and
  * the sign-in history of each.
  *
- *   GET  /sso/users                    — the list (`?q=`, `?status=active|inactive|all`)
- *   GET  /sso/users/{id}               — one user and their history
- *   POST /sso/users/{id}/deactivate    — close the user's access here
- *   POST /sso/users/{id}/activate      — open it again
- *   POST /sso/users/{id}/end-sessions  — sign the user out everywhere in this application
+ *   GET  /auth/users                    — the list (`?q=`, `?status=active|inactive|all`)
+ *   GET  /auth/users/{id}               — one user and their history
+ *   POST /auth/users/{id}/deactivate    — close the user's access here
+ *   POST /auth/users/{id}/activate      — open it again
+ *   POST /auth/users/{id}/end-sessions  — sign the user out everywhere in this application
  *
  * Access to the application itself is granted in Rock Software ID; this page
  * only closes it here, and roles stay the application's. An application adds
  * its own columns and sections through events, filling the `ArrayObject` in
  * the event data:
  *
- * - `Sso.userListColumns` — `columns[] = ['label' => string, 'value' => fn(EntityInterface $user): string]`
- * - `Sso.userViewSections` — `sections[] = ['title' => string, 'element' => string, 'data' => array]`,
+ * - `RockSoftwareUsers.userListColumns` — `columns[] = ['label' => string, 'value' => fn(EntityInterface $user): string]`
+ * - `RockSoftwareUsers.userViewSections` — `sections[] = ['title' => string, 'element' => string, 'data' => array]`,
  *   rendered with the application's element and `$user`
  *
- * It tells of each change through `Sso.userDeactivated`, `Sso.userActivated`
- * and `Sso.sessionsEnded` (data: user, actor).
+ * It tells of each change through `RockSoftwareUsers.userDeactivated`, `RockSoftwareUsers.userActivated`
+ * and `RockSoftwareUsers.sessionsEnded` (data: user, actor).
  *
- * Who may open it: `Sso.usersAccess`, else `Sso.settingsAccess`.
+ * Who may open it: `RockSoftwareUsers.usersAccess`, else `RockSoftwareUsers.settingsAccess`.
  *
  * @property \Authentication\Controller\Component\AuthenticationComponent $Authentication
  * @property \Cake\Controller\Component\FlashComponent $Flash
@@ -48,11 +48,11 @@ class UsersController extends SettingsBaseController
 {
     public const PAGE_SIZE = 50;
 
-    public const EVENT_LIST_COLUMNS = 'Sso.userListColumns';
-    public const EVENT_VIEW_SECTIONS = 'Sso.userViewSections';
-    public const EVENT_DEACTIVATED = 'Sso.userDeactivated';
-    public const EVENT_ACTIVATED = 'Sso.userActivated';
-    public const EVENT_SESSIONS_ENDED = 'Sso.sessionsEnded';
+    public const EVENT_LIST_COLUMNS = 'RockSoftwareUsers.userListColumns';
+    public const EVENT_VIEW_SECTIONS = 'RockSoftwareUsers.userViewSections';
+    public const EVENT_DEACTIVATED = 'RockSoftwareUsers.userDeactivated';
+    public const EVENT_ACTIVATED = 'RockSoftwareUsers.userActivated';
+    public const EVENT_SESSIONS_ENDED = 'RockSoftwareUsers.sessionsEnded';
 
     /**
      * @return void
@@ -84,10 +84,11 @@ class UsersController extends SettingsBaseController
         if ($identity === null) {
             return;
         }
-        $access = Configure::read('Sso.usersAccess') ?? Configure::read('Sso.settingsAccess');
+        $access = Configure::read('RockSoftwareUsers.usersAccess')
+            ?? Configure::read('RockSoftwareUsers.settingsAccess');
         $allowed = $access === null || (is_callable($access) && $access($identity, $this->getRequest()) === true);
         if (!$allowed) {
-            throw new ForbiddenException(__d('sso', 'You may not manage users.'));
+            throw new ForbiddenException(__d('rock_software_users', 'You may not manage users.'));
         }
     }
 
@@ -142,7 +143,7 @@ class UsersController extends SettingsBaseController
             'search' => $search,
             'status' => $status,
             'linked' => $this->linkedUserIds($ids),
-            'lastSignIns' => $this->fetchTable('Sso.SsoSessionEvents')->latestSignIns($ids),
+            'lastSignIns' => $this->fetchTable('RockSoftware/Users.SessionEvents')->latestSignIns($ids),
             'columns' => $columns->getArrayCopy(),
         ]);
     }
@@ -154,8 +155,8 @@ class UsersController extends SettingsBaseController
     public function view(string $id): void
     {
         $user = $this->user($id);
-        /** @var \Sso\Model\Table\SsoSessionEventsTable $events */
-        $events = $this->fetchTable('Sso.SsoSessionEvents');
+        /** @var \RockSoftware\Users\Model\Table\SessionEventsTable $events */
+        $events = $this->fetchTable('RockSoftware/Users.SessionEvents');
         $history = $events->forUser((int)$user->get('id'));
 
         $actorIds = array_values(array_unique(array_filter(array_map(
@@ -188,7 +189,7 @@ class UsersController extends SettingsBaseController
             'lastSignIn' => $events->latestSignIns([(int)$user->get('id')])[(int)$user->get('id')] ?? null,
             'history' => $history,
             'actors' => $actors,
-            'retentionDays' => $this->fetchTable('Sso.SsoSettings')->sessionLimits()['retention_days'],
+            'retentionDays' => $this->fetchTable('RockSoftware/Users.Settings')->sessionLimits()['retention_days'],
             'sections' => $sections->getArrayCopy(),
         ]);
     }
@@ -221,13 +222,13 @@ class UsersController extends SettingsBaseController
     {
         $this->getRequest()->allowMethod(['post']);
         $user = $this->user($id);
-        (new SignInHistory())->record(SsoSessionEventType::SESSIONS_ENDED, [
+        (new SignInHistory())->record(SessionEventType::SESSIONS_ENDED, [
             'user_id' => (int)$user->get('id'),
             'actor_user_id' => $this->actorId(),
         ], $this->getRequest());
         $this->notify(self::EVENT_SESSIONS_ENDED, $user);
         $name = UserProvisioner::displayName($user);
-        $this->Flash->success(__d('sso', '{0} is signed out of this application.', $name));
+        $this->Flash->success(__d('rock_software_users', '{0} is signed out of this application.', $name));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -246,22 +247,22 @@ class UsersController extends SettingsBaseController
             throw new NotFoundException();
         }
         if (!$active && $this->isSelf($user)) {
-            $this->Flash->error(__d('sso', 'You cannot deactivate yourself.'));
+            $this->Flash->error(__d('rock_software_users', 'You cannot deactivate yourself.'));
 
             return $this->redirect(['action' => 'view', $id]);
         }
         $user->set($field, $active, ['guard' => false]);
         $this->users()->saveOrFail($user, ['validate' => false]);
         (new SignInHistory())->record(
-            $active ? SsoSessionEventType::USER_ACTIVATED : SsoSessionEventType::USER_DEACTIVATED,
+            $active ? SessionEventType::USER_ACTIVATED : SessionEventType::USER_DEACTIVATED,
             ['user_id' => (int)$user->get('id'), 'actor_user_id' => $this->actorId()],
             $this->getRequest(),
         );
         $this->notify($active ? self::EVENT_ACTIVATED : self::EVENT_DEACTIVATED, $user);
         $name = UserProvisioner::displayName($user);
         $this->Flash->success($active
-            ? __d('sso', '{0} can sign in again.', $name)
-            : __d('sso', '{0} is deactivated and signed out of this application.', $name));
+            ? __d('rock_software_users', '{0} can sign in again.', $name)
+            : __d('rock_software_users', '{0} is deactivated and signed out of this application.', $name));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -299,7 +300,7 @@ class UsersController extends SettingsBaseController
         }
         $linked = [];
         foreach ((new UserProvisioner())->identities()->find()->where(['user_id IN' => $ids]) as $identity) {
-            /** @var \Sso\Model\Entity\SsoIdentity $identity */
+            /** @var \RockSoftware\Users\Model\Entity\Identity $identity */
             $linked[(int)$identity->user_id] = true;
         }
 

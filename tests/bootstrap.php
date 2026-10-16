@@ -8,7 +8,7 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\Fixture\SchemaLoader;
 use Cake\Utility\Security;
 use Migrations\Migrations;
-use Sso\SsoPlugin;
+use RockSoftware\Users\UsersPlugin;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -52,12 +52,12 @@ Configure::write('App', [
     ],
 ]);
 // The few lines an application writes; everything else is a default.
-Configure::write('Sso', [
+Configure::write('RockSoftwareUsers', [
     'appName' => 'Test App',
-    'loginRedirect' => '/dashboard',
+    'signInRedirect' => '/dashboard',
     'publicPaths' => ['/health'],
 ]);
-Security::setSalt('cakephp-sso-test-salt-0123456789abcdef0123456789abcdef');
+Security::setSalt('cakephp-rsu-test-salt-0123456789abcdef0123456789abcdef');
 
 mb_internal_encoding('UTF-8');
 
@@ -84,6 +84,7 @@ Cache::setConfig([
 // every table first, so it runs before the plugin's own migration, which
 // gives the tests the schema an application actually gets.
 (new SchemaLoader())->loadInternalFile(__DIR__ . DS . 'schema.php', 'test');
-Plugin::getCollection()->add(new SsoPlugin(['path' => dirname(__DIR__) . DS]));
-SsoPlugin::applyDefaults();
-(new Migrations(['connection' => 'test', 'plugin' => 'Sso']))->migrate();
+Plugin::getCollection()->add(new UsersPlugin(['path' => dirname(__DIR__) . DS]));
+UsersPlugin::applyDefaults();
+UsersPlugin::loadTranslations();
+(new Migrations(['connection' => 'test', 'plugin' => 'RockSoftware/Users']))->migrate();

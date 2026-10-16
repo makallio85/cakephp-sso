@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Middleware;
+namespace RockSoftware\Users\Middleware;
 
 use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
@@ -15,17 +15,17 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
-use Sso\Model\Entity\SsoSessionEventType;
-use Sso\Service\PasswordSignIn;
-use Sso\Service\SignInHistory;
-use Sso\Service\UserProvisioner;
-use Sso\Session\SsoSession;
+use RockSoftware\Users\Model\Entity\SessionEventType;
+use RockSoftware\Users\Service\PasswordSignIn;
+use RockSoftware\Users\Service\SignInHistory;
+use RockSoftware\Users\Service\UserProvisioner;
+use RockSoftware\Users\Session\SignInSession;
 use Throwable;
 
 /**
  * Signs out a session the account no longer honours, on its next request.
  *
- * A session the plugin established (`SsoSession::isPluginSession()`) ends when:
+ * A session the plugin established (`SignInSession::isPluginSession()`) ends when:
  *
  * - the user row is gone or deactivated in the application;
  * - the session started before the identity's `sessions_valid_from`, which a
@@ -36,7 +36,7 @@ use Throwable;
  *   timeout, set on the settings page (both off by default).
  *
  * Any other session is the application's to manage, with one exception: in an
- * application that declared a password form (`Sso.passwordSignIn`), a password
+ * application that declared a password form (`RockSoftwareUsers.passwordSignIn`), a password
  * session ends once password sign-in has been turned off on the settings
  * page. Requests without an identity, and token-authenticated requests (no
  * identity in the session), always pass through untouched.
@@ -60,22 +60,28 @@ class SessionCheckMiddleware implements MiddlewareInterface
         $identity = $request->getAttribute('identity');
         $message = null;
         $session = $request->getSession();
-        if ($identity !== null && SsoSession::isPluginSession($session)) {
+        if ($identity !== null && SignInSession::isPluginSession($session)) {
             if ($this->ended($request, $identity->getIdentifier())) {
-                $message = __d('sso', 'Your session has ended. Please sign in again.');
+                $message = __d('rock_software_users', 'Your session has ended. Please sign in again.');
             } elseif ($this->passwordSessionOff($request)) {
-                $message = __d('sso', 'Password sign-in has been turned off. Please sign in with Rock Software ID.');
+                $message = __d(
+                    'rock_software_users',
+                    'Password sign-in has been turned off. Please sign in with Rock Software ID.',
+                );
             } elseif ($this->expired($request)) {
-                (new SignInHistory())->record(SsoSessionEventType::SESSION_EXPIRED, [
+                (new SignInHistory())->record(SessionEventType::SESSION_EXPIRED, [
                     'user_id' => (int)$identity->getIdentifier(),
-                    'method' => (string)$session->read(SsoSession::METHOD),
+                    'method' => (string)$session->read(SignInSession::METHOD),
                 ], $request);
-                $message = __d('sso', 'Your session has expired. Please sign in again.');
+                $message = __d('rock_software_users', 'Your session has expired. Please sign in again.');
             } else {
-                $session->write(SsoSession::LAST_SEEN_AT, time());
+                $session->write(SignInSession::LAST_SEEN_AT, time());
             }
         } elseif ($identity !== null && $this->passwordSessionBarred($request)) {
-            $message = __d('sso', 'Password sign-in has been turned off. Please sign in with Rock Software ID.');
+            $message = __d(
+                'rock_software_users',
+                'Password sign-in has been turned off. Please sign in with Rock Software ID.',
+            );
         }
         if ($message === null) {
             return $handler->handle($request);
@@ -92,13 +98,13 @@ class SessionCheckMiddleware implements MiddlewareInterface
 
         return (new Response())
             ->withStatus(302)
-            ->withLocation(Router::url(Configure::read('Sso.loginUrl'), true));
+            ->withLocation(Router::url(Configure::read('RockSoftwareUsers.signInUrl'), true));
     }
 
     /**
      * Whether this is a password session in an application whose password
      * sign-in has been turned off: the application declared a password form
-     * (`Sso.passwordSignIn`), the session holds an identity the plugin did not
+     * (`RockSoftwareUsers.passwordSignIn`), the session holds an identity the plugin did not
      * establish, and the switch on the settings page is off. A token request
      * carries no session identity and is never touched.
      *
@@ -107,17 +113,17 @@ class SessionCheckMiddleware implements MiddlewareInterface
      */
     private function passwordSessionBarred(ServerRequest $request): bool
     {
-        if (Configure::read('Sso.passwordSignIn') !== true || !$request->getSession()->check('Auth')) {
+        if (Configure::read('RockSoftwareUsers.passwordSignIn') !== true || !$request->getSession()->check('Auth')) {
             return false;
         }
         try {
-            /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-            $settings = TableRegistry::getTableLocator()->get('Sso.SsoSettings');
+            /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+            $settings = TableRegistry::getTableLocator()->get('RockSoftware/Users.Settings');
 
             return $settings->enabled() !== null && !$settings->passwordSignInAllowed();
         } catch (Throwable $e) {
             // A database hiccup is not evidence the switch is off.
-            Log::warning('SSO password session check skipped: ' . $e->getMessage());
+            Log::warning('Password session check skipped: ' . $e->getMessage());
 
             return false;
         }
@@ -131,13 +137,13 @@ class SessionCheckMiddleware implements MiddlewareInterface
      */
     private function passwordSessionOff(ServerRequest $request): bool
     {
-        if ($request->getSession()->read(SsoSession::METHOD) !== SsoSession::METHOD_PASSWORD) {
+        if ($request->getSession()->read(SignInSession::METHOD) !== SignInSession::METHOD_PASSWORD) {
             return false;
         }
         try {
             return !(new PasswordSignIn())->available();
         } catch (Throwable $e) {
-            Log::warning('SSO password session check skipped: ' . $e->getMessage());
+            Log::warning('Password session check skipped: ' . $e->getMessage());
 
             return false;
         }
@@ -152,21 +158,21 @@ class SessionCheckMiddleware implements MiddlewareInterface
     private function expired(ServerRequest $request): bool
     {
         try {
-            /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-            $settings = TableRegistry::getTableLocator()->get('Sso.SsoSettings');
+            /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+            $settings = TableRegistry::getTableLocator()->get('RockSoftware/Users.Settings');
             $limits = $settings->sessionLimits();
         } catch (Throwable $e) {
-            Log::warning('SSO session limits not checked: ' . $e->getMessage());
+            Log::warning('Session limits not checked: ' . $e->getMessage());
 
             return false;
         }
         $session = $request->getSession();
         $now = time();
-        $establishedAt = $session->read(SsoSession::ESTABLISHED_AT);
+        $establishedAt = $session->read(SignInSession::ESTABLISHED_AT);
         if ($limits['max_hours'] > 0 && is_int($establishedAt) && $now - $establishedAt > $limits['max_hours'] * 3600) {
             return true;
         }
-        $lastSeenAt = $session->read(SsoSession::LAST_SEEN_AT);
+        $lastSeenAt = $session->read(SignInSession::LAST_SEEN_AT);
 
         return $limits['idle_minutes'] > 0 && is_int($lastSeenAt) && $now - $lastSeenAt > $limits['idle_minutes'] * 60;
     }
@@ -183,7 +189,7 @@ class SessionCheckMiddleware implements MiddlewareInterface
             $user = $provisioner->users()->find()->where(['id' => $userId])->first();
         } catch (Throwable $e) {
             // A database hiccup is not evidence the session has ended.
-            Log::warning('SSO session check skipped: ' . $e->getMessage());
+            Log::warning('Session check skipped: ' . $e->getMessage());
 
             return false;
         }
@@ -194,9 +200,9 @@ class SessionCheckMiddleware implements MiddlewareInterface
         if (!UserProvisioner::isActive($user)) {
             return true;
         }
-        $establishedAt = $request->getSession()->read(SsoSession::ESTABLISHED_AT);
-        /** @var \Sso\Model\Table\SsoSessionEventsTable $events */
-        $events = TableRegistry::getTableLocator()->get('Sso.SsoSessionEvents');
+        $establishedAt = $request->getSession()->read(SignInSession::ESTABLISHED_AT);
+        /** @var \RockSoftware\Users\Model\Table\SessionEventsTable $events */
+        $events = TableRegistry::getTableLocator()->get('RockSoftware/Users.SessionEvents');
         $endedAt = $events->sessionsEndedAt((int)$user->get('id'));
         if ($endedAt !== null && (!is_int($establishedAt) || $establishedAt < $endedAt->getTimestamp())) {
             return true;
@@ -204,11 +210,6 @@ class SessionCheckMiddleware implements MiddlewareInterface
 
         $identity = $provisioner->identities()->findForUser((int)$user->get('id'));
         $validFrom = $identity?->sessions_valid_from;
-        $legacyField = Configure::read('Sso.sessionsValidFromField');
-        $hasLegacyField = is_string($legacyField) && $provisioner->users()->getSchema()->hasColumn($legacyField);
-        if ($validFrom === null && $hasLegacyField) {
-            $validFrom = $user->get($legacyField);
-        }
         if (!$validFrom instanceof DateTimeInterface) {
             return false;
         }

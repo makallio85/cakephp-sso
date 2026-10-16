@@ -14,7 +14,7 @@ use Cake\Http\MiddlewareQueue;
 use Cake\Routing\Middleware\RoutingMiddleware;
 use Cake\Routing\RouteBuilder;
 use Psr\Http\Message\ServerRequestInterface;
-use Sso\SsoPlugin;
+use RockSoftware\Users\UsersPlugin;
 
 /**
  * A consuming application shaped like konekallio-messaging: its own
@@ -30,7 +30,7 @@ class OwnAuthApplication extends BaseApplication implements AuthenticationServic
      */
     public function bootstrap(): void
     {
-        $this->addPlugin(SsoPlugin::class);
+        $this->addPlugin(UsersPlugin::class);
     }
 
     /**

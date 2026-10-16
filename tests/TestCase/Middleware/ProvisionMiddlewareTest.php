@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase\Middleware;
+namespace RockSoftware\Users\Test\TestCase\Middleware;
 
 use Cake\Cache\Cache;
 use Cake\Core\Configure;
@@ -13,12 +13,12 @@ use Cake\Log\Engine\ArrayLog;
 use Cake\Log\Log;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
-use Sso\Service\Provisioning;
-use Sso\SsoPlugin;
-use Sso\Test\TestCase\FakeProvider;
+use RockSoftware\Users\Service\Provisioning;
+use RockSoftware\Users\Test\TestCase\FakeProvider;
+use RockSoftware\Users\UsersPlugin;
 
 /**
- * `POST /sso/provision`: Rock Software ID hands the application its
+ * `POST /auth/provision`: Rock Software ID hands the application its
  * connection. Every way a request can be forged, replayed or aimed elsewhere
  * is refused before anything is stored.
  */
@@ -29,9 +29,9 @@ class ProvisionMiddlewareTest extends TestCase
     private const SECRET = 'provisioned-secret';
 
     protected array $fixtures = [
-        'plugin.Sso.SsoSettings',
-        'plugin.Sso.SsoProvisionings',
-        'plugin.Sso.Users',
+        'plugin.RockSoftware/Users.Settings',
+        'plugin.RockSoftware/Users.Provisionings',
+        'plugin.RockSoftware/Users.Users',
     ];
 
     private FakeProvider $provider;
@@ -43,14 +43,14 @@ class ProvisionMiddlewareTest extends TestCase
         Client::clearMockResponses();
         $this->provider = new FakeProvider();
         $this->provider->serveMetadata();
-        Configure::write('Sso.provisioning', ['issuerPrefix' => 'https://id.example.test/application/o/']);
+        Configure::write('RockSoftwareUsers.provisioning', ['issuerPrefix' => 'https://id.example.test/application/o/']);
         Log::setConfig('provision_test', ['className' => ArrayLog::class, 'levels' => ['notice', 'warning', 'error']]);
     }
 
     protected function tearDown(): void
     {
         Client::clearMockResponses();
-        Configure::write('Sso.provisioning', SsoPlugin::DEFAULTS['provisioning']);
+        Configure::write('RockSoftwareUsers.provisioning', UsersPlugin::DEFAULTS['provisioning']);
         EventManager::instance()->off(Provisioning::EVENT);
         Log::drop('provision_test');
         parent::tearDown();
@@ -66,7 +66,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken());
 
         $this->assertResponseCode(204);
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $setting = $settings->enabled();
         $this->assertNotNull($setting);
         $this->assertSame(FakeProvider::ISSUER, $setting->issuer_url);
@@ -74,14 +74,14 @@ class ProvisionMiddlewareTest extends TestCase
         $this->assertSame('app-staff', $setting->required_group);
         $this->assertSame(self::SECRET, $settings->clientSecret($setting));
         $this->assertNotSame(self::SECRET, $setting->client_secret, 'The secret is stored encrypted.');
-        $this->assertSame(1, $this->fetchTable('Sso.SsoProvisionings')->find()->count());
+        $this->assertSame(1, $this->fetchTable('RockSoftware/Users.Provisionings')->find()->count());
         $this->assertCount(1, $events);
         $this->assertSame(FakeProvider::CLIENT_ID, $events[0]['clientId']);
     }
 
     public function testReplacesAnExistingConnectionInsideAnOpenedWindow(): void
     {
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $settings->store([
             'issuer_url' => FakeProvider::ISSUER,
             'client_id' => FakeProvider::CLIENT_ID,
@@ -94,7 +94,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken());
 
         $this->assertResponseCode(204);
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $this->assertSame(1, $settings->find()->count());
         $setting = $settings->enabled();
         $this->assertSame(self::SECRET, $settings->clientSecret($setting));
@@ -111,14 +111,14 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken(), ['client_secret' => 'attacker-secret']);
 
         $this->assertResponseCode(401);
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $this->assertSame(self::SECRET, $settings->clientSecret($settings->enabled()));
         $this->assertStringContainsString('closed', implode("\n", Log::engine('provision_test')->read()));
     }
 
     public function testClosedForAConnectionMadeByHand(): void
     {
-        $this->fetchTable('Sso.SsoSettings')->store([
+        $this->fetchTable('RockSoftware/Users.Settings')->store([
             'issuer_url' => FakeProvider::ISSUER,
             'client_id' => FakeProvider::CLIENT_ID,
             'client_secret' => 'typed-secret',
@@ -132,7 +132,7 @@ class ProvisionMiddlewareTest extends TestCase
 
     public function testClosedAfterTheWindowEnds(): void
     {
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $settings->store([
             'issuer_url' => FakeProvider::ISSUER,
             'client_id' => FakeProvider::CLIENT_ID,
@@ -157,7 +157,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($token, ['client_secret' => 'attacker-secret']);
 
         $this->assertResponseCode(401);
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $this->assertSame(self::SECRET, $settings->clientSecret($settings->enabled()));
     }
 
@@ -170,7 +170,7 @@ class ProvisionMiddlewareTest extends TestCase
         ]);
 
         $this->assertResponseCode(401);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
         $this->assertStringContainsString('untrusted issuer', implode("\n", Log::engine('provision_test')->read()));
     }
 
@@ -198,7 +198,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken(['aud' => 'other-client', 'azp' => 'other-client']));
 
         $this->assertResponseCode(401);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testRefusesTokenFromAnotherIssuerOfTheSameProvider(): void
@@ -206,7 +206,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken(['iss' => 'https://id.example.test/application/o/other/']));
 
         $this->assertResponseCode(401);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testRefusesTokenIssuedToAnotherAccount(): void
@@ -214,7 +214,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken(['preferred_username' => 'someone']));
 
         $this->assertResponseCode(401);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testRefusesOldToken(): void
@@ -222,7 +222,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken(['iat' => time() - 600]));
 
         $this->assertResponseCode(401);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testRefusesTokenWithoutId(): void
@@ -237,7 +237,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken([], FakeProvider::foreignKey()));
 
         $this->assertResponseCode(401);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testRefusesKeysOnAnotherHost(): void
@@ -256,7 +256,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken());
 
         $this->assertResponseCode(401);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testRefusesMissingOrMalformedAuthorization(): void
@@ -265,7 +265,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->assertResponseCode(401);
 
         $this->configRequest(['headers' => ['Authorization' => 'Basic abc', 'Content-Type' => 'application/json']]);
-        $this->post('/sso/provision', (string)json_encode($this->body()));
+        $this->post('/auth/provision', (string)json_encode($this->body()));
         $this->assertResponseCode(401);
     }
 
@@ -275,7 +275,7 @@ class ProvisionMiddlewareTest extends TestCase
             'Authorization' => 'Bearer ' . $this->provider->provisioningToken(),
             'Content-Type' => 'application/json',
         ]]);
-        $this->post('/sso/provision', 'not json');
+        $this->post('/auth/provision', 'not json');
         $this->assertResponseCode(400);
 
         $this->provision($this->provider->provisioningToken(), ['client_secret' => '']);
@@ -287,24 +287,24 @@ class ProvisionMiddlewareTest extends TestCase
 
     public function testOnlyPost(): void
     {
-        $this->get('/sso/provision');
+        $this->get('/auth/provision');
 
         $this->assertResponseCode(405);
     }
 
     public function testSwitchedOff(): void
     {
-        Configure::write('Sso.provisioning', false);
+        Configure::write('RockSoftwareUsers.provisioning', false);
 
         $this->provision($this->provider->provisioningToken());
 
         $this->assertResponseCode(404);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testRateLimited(): void
     {
-        Configure::write('Sso.provisioning.rateLimit', 2);
+        Configure::write('RockSoftwareUsers.provisioning.rateLimit', 2);
         $this->provision('x.y.z');
         $this->provision('x.y.z');
         $this->assertResponseCode(401);
@@ -312,7 +312,7 @@ class ProvisionMiddlewareTest extends TestCase
         $this->provision($this->provider->provisioningToken());
 
         $this->assertResponseCode(429);
-        $this->assertNull($this->fetchTable('Sso.SsoSettings')->current());
+        $this->assertNull($this->fetchTable('RockSoftware/Users.Settings')->current());
     }
 
     public function testSecretNeverReachesTheLog(): void
@@ -338,7 +338,7 @@ class ProvisionMiddlewareTest extends TestCase
             $headers['Authorization'] = 'Bearer ' . $token;
         }
         $this->configRequest(['headers' => $headers]);
-        $this->post('/sso/provision', (string)json_encode($override + $this->body()));
+        $this->post('/auth/provision', (string)json_encode($override + $this->body()));
     }
 
     /**

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase;
+namespace RockSoftware\Users\Test\TestCase;
 
 use Cake\Http\Client;
 use Cake\Http\Client\Response;

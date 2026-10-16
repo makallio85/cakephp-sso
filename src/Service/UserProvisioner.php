@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Cake\Core\Configure;
 use Cake\Database\Schema\TableSchemaInterface;
@@ -11,8 +11,7 @@ use Cake\Event\EventManager;
 use Cake\I18n\DateTime;
 use Cake\ORM\Locator\LocatorAwareTrait;
 use Cake\ORM\Table;
-use Sso\Model\Entity\IdentitySourceType;
-use Sso\Model\Table\SsoIdentitiesTable;
+use RockSoftware\Users\Model\Table\IdentitiesTable;
 
 /**
  * Turns a verified identity into the application's user row.
@@ -21,9 +20,9 @@ use Sso\Model\Table\SsoIdentitiesTable;
  * refused (`UserInactiveException`) until an administrator activates them on
  * the users page.
  *
- * The link lives in the plugin's `sso_identities` table, so the application's
+ * The link lives in the plugin's `rock_software_users_identities` table, so the application's
  * `users` table needs nothing of its own: the plugin writes only the columns it
- * finds (email, name, active flag; names in `Sso.fields`).
+ * finds (email, name, active flag; names in `RockSoftwareUsers.fields`).
  *
  * The user is found through their identity's `external_id`. A user not yet
  * linked is matched on a verified email address, which is how existing accounts
@@ -32,13 +31,13 @@ use Sso\Model\Table\SsoIdentitiesTable;
  * master record.
  *
  * Fields the application needs beyond these are filled by a listener on
- * `Sso.beforeUserSave`.
+ * `RockSoftwareUsers.beforeUserSave`.
  */
 class UserProvisioner
 {
     use LocatorAwareTrait;
 
-    public const EVENT_BEFORE_USER_SAVE = 'Sso.beforeUserSave';
+    public const EVENT_BEFORE_USER_SAVE = 'RockSoftwareUsers.beforeUserSave';
 
     /**
      * @param array<string, mixed> $claims Verified ID token claims.
@@ -49,7 +48,7 @@ class UserProvisioner
         $subject = (string)$claims['sub'];
         $email = $claims['email'] ?? null;
         if (!is_string($email) || $email === '') {
-            throw new SsoException('The identity carries no email address.');
+            throw new SignInException('The identity carries no email address.');
         }
 
         $users = $this->users();
@@ -77,8 +76,8 @@ class UserProvisioner
         }
 
         $isNew = $user === null;
-        if ($isNew && !Configure::read('Sso.createUsers')) {
-            throw new SsoException(sprintf('No user matches %s and creating users is switched off.', $email));
+        if ($isNew && !Configure::read('RockSoftwareUsers.createUsers')) {
+            throw new SignInException(sprintf('No user matches %s and creating users is switched off.', $email));
         }
         $user ??= $users->newEmptyEntity();
 
@@ -93,7 +92,6 @@ class UserProvisioner
         if ($isNew) {
             $values += $this->requiredDefaults($schema);
         }
-        $values += $this->legacyColumns($schema, $subject);
         // One field at a time: set() with an array is deprecated from 5.2, and
         // patch() does not exist before it.
         foreach ($values as $field => $value) {
@@ -126,7 +124,7 @@ class UserProvisioner
 
     /**
      * Creates a user with no link to the identity provider, as a first
-     * sign-in would (the application's `Sso.beforeUserSave` listeners run, a
+     * sign-in would (the application's `RockSoftwareUsers.beforeUserSave` listeners run, a
      * required password gets an unusable value). For an emergency sign-in on an
      * empty development database; the first real sign-in with the same verified
      * address links it.
@@ -181,20 +179,20 @@ class UserProvisioner
      */
     public function users(): Table
     {
-        return $this->fetchTable((string)Configure::read('Sso.userModel', 'Users'));
+        return $this->fetchTable((string)Configure::read('RockSoftwareUsers.userModel', 'Users'));
     }
 
     /**
-     * @return \Sso\Model\Table\SsoIdentitiesTable
+     * @return \RockSoftware\Users\Model\Table\IdentitiesTable
      */
-    public function identities(): SsoIdentitiesTable
+    public function identities(): IdentitiesTable
     {
-        /** @var \Sso\Model\Table\SsoIdentitiesTable */
-        return $this->fetchTable('Sso.SsoIdentities');
+        /** @var \RockSoftware\Users\Model\Table\IdentitiesTable */
+        return $this->fetchTable('RockSoftware/Users.Identities');
     }
 
     /**
-     * Column names on the users table, overridable through `Sso.fields`. A null
+     * Column names on the users table, overridable through `RockSoftwareUsers.fields`. A null
      * or missing column is not written.
      *
      * @return array{email: string, name: string|null, is_active: string|null, password: string|null}
@@ -207,7 +205,7 @@ class UserProvisioner
             'name' => 'name',
             'is_active' => 'is_active',
             'password' => 'password',
-        ], (array)Configure::read('Sso.fields', []));
+        ], (array)Configure::read('RockSoftwareUsers.fields', []));
     }
 
     /**
@@ -245,7 +243,7 @@ class UserProvisioner
      * A value for every column a new row cannot be inserted without, other than
      * the ones written above: a `password` gets an unusable value, which no
      * password check ever matches. Anything else is the application's to fill,
-     * on `Sso.beforeUserSave`.
+     * on `RockSoftwareUsers.beforeUserSave`.
      *
      * @param \Cake\Database\Schema\TableSchemaInterface $schema The users table.
      * @return array<string, mixed>
@@ -256,33 +254,8 @@ class UserProvisioner
         foreach (array_filter([self::fields()['password']]) as $column) {
             $definition = $schema->getColumn($column);
             if ($definition !== null && !$definition['null'] && $definition['default'] === null) {
-                $values[$column] = '!sso:' . bin2hex(random_bytes(24));
+                $values[$column] = '!rsu:' . bin2hex(random_bytes(24));
             }
-        }
-
-        return $values;
-    }
-
-    /**
-     * Columns a 1.1 application kept on its users table, written while they
-     * still exist so it can drop them at its own pace.
-     *
-     * @param \Cake\Database\Schema\TableSchemaInterface $schema The users table.
-     * @param string $subject The subject identifier.
-     * @return array<string, mixed>
-     */
-    private function legacyColumns(TableSchemaInterface $schema, string $subject): array
-    {
-        $values = [];
-        if ($schema->hasColumn('external_id')) {
-            $values['external_id'] = $subject;
-        }
-        if ($schema->hasColumn('synced_at')) {
-            $values['synced_at'] = DateTime::now();
-        }
-        if ($schema->hasColumn('identity_source_id')) {
-            $values['identity_source_id'] = $this->fetchTable('Sso.IdentitySourceTypes')
-                ->idFor(IdentitySourceType::SSO);
         }
 
         return $values;

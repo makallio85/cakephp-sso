@@ -1,14 +1,14 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Cake\Cache\Cache;
 use Cake\Core\Configure;
 use Cake\Http\Client;
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
-use Sso\Model\Entity\SsoSetting;
+use RockSoftware\Users\Model\Entity\Setting;
 use Throwable;
 
 /**
@@ -38,12 +38,12 @@ class OidcClient
     private Client $http;
 
     /**
-     * @param \Sso\Model\Entity\SsoSetting $setting The provider connection.
+     * @param \RockSoftware\Users\Model\Entity\Setting $setting The provider connection.
      * @param string $clientSecret The decrypted client secret.
      * @param \Cake\Http\Client|null $http Injected by tests.
      */
     public function __construct(
-        private SsoSetting $setting,
+        private Setting $setting,
         private string $clientSecret,
         ?Client $http = null,
     ) {
@@ -57,7 +57,7 @@ class OidcClient
      */
     public function discovery(): array
     {
-        $key = 'sso_discovery_' . md5($this->setting->issuer_url);
+        $key = 'rock_software_users_discovery_' . md5($this->setting->issuer_url);
         $cached = Cache::read($key, self::cacheConfig());
         if (is_array($cached)) {
             return $cached;
@@ -66,11 +66,11 @@ class OidcClient
         $document = $this->getJson($this->setting->issuer_url . '.well-known/openid-configuration');
         $issuer = $document['issuer'] ?? null;
         if (!is_string($issuer) || rtrim($issuer, '/') !== rtrim($this->setting->issuer_url, '/')) {
-            throw new SsoException('The discovery document names a different issuer.');
+            throw new SignInException('The discovery document names a different issuer.');
         }
         foreach (['authorization_endpoint', 'token_endpoint', 'jwks_uri'] as $required) {
             if (!is_string($document[$required] ?? null)) {
-                throw new SsoException(sprintf('The discovery document has no %s.', $required));
+                throw new SignInException(sprintf('The discovery document has no %s.', $required));
             }
         }
 
@@ -126,11 +126,11 @@ class OidcClient
             ['auth' => ['username' => $this->setting->client_id, 'password' => $this->clientSecret]],
         );
         if (!$response->isOk()) {
-            throw new SsoException(sprintf('The token endpoint answered %d.', $response->getStatusCode()));
+            throw new SignInException(sprintf('The token endpoint answered %d.', $response->getStatusCode()));
         }
         $body = $response->getJson();
         if (!is_array($body) || !is_string($body['id_token'] ?? null)) {
-            throw new SsoException('The token response has no ID token.');
+            throw new SignInException('The token response has no ID token.');
         }
 
         return $body;
@@ -149,10 +149,10 @@ class OidcClient
 
         $tokenNonce = $claims['nonce'] ?? null;
         if (!is_string($tokenNonce) || !hash_equals($nonce, $tokenNonce)) {
-            throw new SsoException('The ID token nonce does not match.');
+            throw new SignInException('The ID token nonce does not match.');
         }
         if (!is_string($claims['sub'] ?? null) || $claims['sub'] === '') {
-            throw new SsoException('The ID token has no subject.');
+            throw new SignInException('The ID token has no subject.');
         }
 
         return $claims;
@@ -170,13 +170,13 @@ class OidcClient
 
         $events = $claims['events'] ?? null;
         if (!is_array($events) || !array_key_exists(self::BACKCHANNEL_LOGOUT_EVENT, $events)) {
-            throw new SsoException('The logout token carries no back-channel logout event.');
+            throw new SignInException('The logout token carries no back-channel logout event.');
         }
         if (array_key_exists('nonce', $claims)) {
-            throw new SsoException('A logout token must not carry a nonce.');
+            throw new SignInException('A logout token must not carry a nonce.');
         }
         if (!is_string($claims['sub'] ?? null) && !is_string($claims['sid'] ?? null)) {
-            throw new SsoException('The logout token names neither a subject nor a session.');
+            throw new SignInException('The logout token names neither a subject nor a session.');
         }
 
         return $claims;
@@ -198,14 +198,14 @@ class OidcClient
         $claims = $this->decode($token);
 
         if (($claims['preferred_username'] ?? null) !== $subject) {
-            throw new SsoException('The provisioning token was issued to a different account.');
+            throw new SignInException('The provisioning token was issued to a different account.');
         }
         $issuedAt = $claims['iat'] ?? null;
         if (!is_int($issuedAt) || $issuedAt < time() - $maxAge - self::LEEWAY_SECONDS) {
-            throw new SsoException('The provisioning token is too old.');
+            throw new SignInException('The provisioning token is too old.');
         }
         if (!is_string($claims['jti'] ?? null) || $claims['jti'] === '' || strlen($claims['jti']) > 190) {
-            throw new SsoException('The provisioning token has no usable id.');
+            throw new SignInException('The provisioning token has no usable id.');
         }
 
         return $claims;
@@ -265,7 +265,7 @@ class OidcClient
         $header = $this->header($jwt);
         $alg = $header['alg'] ?? null;
         if (!is_string($alg) || !in_array($alg, self::ALGORITHMS, true)) {
-            throw new SsoException('The token is not signed with an accepted algorithm.');
+            throw new SignInException('The token is not signed with an accepted algorithm.');
         }
 
         JWT::$leeway = self::LEEWAY_SECONDS;
@@ -277,7 +277,7 @@ class OidcClient
             try {
                 $payload = JWT::decode($jwt, $this->keys($alg, true));
             } catch (Throwable $e) {
-                throw new SsoException('The token signature or lifetime is invalid: ' . $e->getMessage(), 0, $e);
+                throw new SignInException('The token signature or lifetime is invalid: ' . $e->getMessage(), 0, $e);
             }
         }
 
@@ -286,17 +286,17 @@ class OidcClient
 
         $issuer = $claims['iss'] ?? null;
         if (!is_string($issuer) || rtrim($issuer, '/') !== rtrim($this->setting->issuer_url, '/')) {
-            throw new SsoException('The token was issued by a different issuer.');
+            throw new SignInException('The token was issued by a different issuer.');
         }
         $audience = (array)($claims['aud'] ?? []);
         if (!in_array($this->setting->client_id, $audience, true)) {
-            throw new SsoException('The token was issued to a different client.');
+            throw new SignInException('The token was issued to a different client.');
         }
         if (count($audience) > 1 && ($claims['azp'] ?? null) !== $this->setting->client_id) {
-            throw new SsoException('The token names several audiences but not this client as the authorized party.');
+            throw new SignInException('The token names several audiences but not this client as the authorized party.');
         }
         if (!isset($claims['exp'])) {
-            throw new SsoException('The token has no expiry.');
+            throw new SignInException('The token has no expiry.');
         }
 
         return $claims;
@@ -310,7 +310,7 @@ class OidcClient
     private function keys(string $alg, bool $refresh): array
     {
         $uri = (string)$this->discovery()['jwks_uri'];
-        $key = 'sso_jwks_' . md5($uri);
+        $key = 'rock_software_users_jwks_' . md5($uri);
         $jwks = $refresh ? null : Cache::read($key, self::cacheConfig());
         if (!is_array($jwks)) {
             $jwks = $this->getJson($uri);
@@ -328,11 +328,11 @@ class OidcClient
     {
         $parts = explode('.', $jwt);
         if (count($parts) !== 3) {
-            throw new SsoException('The token is malformed.');
+            throw new SignInException('The token is malformed.');
         }
         $header = json_decode(JWT::urlsafeB64Decode($parts[0]), true);
         if (!is_array($header)) {
-            throw new SsoException('The token header is malformed.');
+            throw new SignInException('The token header is malformed.');
         }
 
         return $header;
@@ -347,14 +347,14 @@ class OidcClient
         try {
             $response = $this->http->get($url);
         } catch (Throwable $e) {
-            throw new SsoException(sprintf('The identity provider is unreachable (%s).', $e->getMessage()), 0, $e);
+            throw new SignInException(sprintf('The identity provider is unreachable (%s).', $e->getMessage()), 0, $e);
         }
         if (!$response->isOk()) {
-            throw new SsoException(sprintf('%s answered %d.', $url, $response->getStatusCode()));
+            throw new SignInException(sprintf('%s answered %d.', $url, $response->getStatusCode()));
         }
         $body = $response->getJson();
         if (!is_array($body)) {
-            throw new SsoException(sprintf('%s did not return JSON.', $url));
+            throw new SignInException(sprintf('%s did not return JSON.', $url));
         }
 
         return $body;
@@ -365,7 +365,7 @@ class OidcClient
      */
     private static function cacheConfig(): string
     {
-        return (string)Configure::read('Sso.cacheConfig', 'default');
+        return (string)Configure::read('RockSoftwareUsers.cacheConfig', 'default');
     }
 
     /**

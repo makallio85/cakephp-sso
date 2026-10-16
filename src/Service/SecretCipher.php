@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Service;
+namespace RockSoftware\Users\Service;
 
 use Cake\Utility\Security;
 
@@ -11,7 +11,7 @@ use Cake\Utility\Security;
  */
 final class SecretCipher
 {
-    private const CONTEXT = 'cakephp-sso:client-secret';
+    private const CONTEXT = 'rocksoftware-cakephp-users:client-secret';
 
     /**
      * @param string $plain The secret.
@@ -31,9 +31,9 @@ final class SecretCipher
         $raw = base64_decode($stored, true);
         $plain = $raw === false ? null : Security::decrypt($raw, self::key());
         if ($plain === null) {
-            throw new SsoException(
-                'The stored SSO client secret cannot be decrypted. Was the security salt changed? '
-                . 'Run `bin/cake sso configure` again.',
+            throw new SignInException(
+                'The stored client secret cannot be decrypted. Was the security salt changed? '
+                . 'Run `bin/cake rock_software_users configure` again.',
             );
         }
 

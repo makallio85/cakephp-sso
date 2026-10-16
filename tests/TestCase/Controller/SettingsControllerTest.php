@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sso\Test\TestCase\Controller;
+namespace RockSoftware\Users\Test\TestCase\Controller;
 
 use Cake\Cache\Cache;
 use Cake\Core\Configure;
@@ -12,9 +12,9 @@ use Cake\Http\TestSuite\HttpClientTrait;
 use Cake\I18n\DateTime;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
-use Sso\Controller\SettingsController;
-use Sso\Session\SsoSession;
-use Sso\SsoPlugin;
+use RockSoftware\Users\Controller\SettingsController;
+use RockSoftware\Users\Session\SignInSession;
+use RockSoftware\Users\UsersPlugin;
 
 class SettingsControllerTest extends TestCase
 {
@@ -26,10 +26,10 @@ class SettingsControllerTest extends TestCase
     private const MISSING = 'https://id.example.test/application/o/apq/';
 
     protected array $fixtures = [
-        'plugin.Sso.SsoSettings',
-        'plugin.Sso.SsoSettingChanges',
-        'plugin.Sso.SsoProvisionings',
-        'plugin.Sso.Users',
+        'plugin.RockSoftware/Users.Settings',
+        'plugin.RockSoftware/Users.SettingChanges',
+        'plugin.RockSoftware/Users.Provisionings',
+        'plugin.RockSoftware/Users.Users',
     ];
 
     protected function setUp(): void
@@ -39,7 +39,7 @@ class SettingsControllerTest extends TestCase
         Client::clearMockResponses();
         $this->enableCsrfToken();
         Configure::write(
-            'Sso.settingsAccess',
+            'RockSoftwareUsers.settingsAccess',
             fn($identity): bool => $identity->get('email') === 'admin@example.test',
         );
 
@@ -60,29 +60,29 @@ class SettingsControllerTest extends TestCase
 
     protected function tearDown(): void
     {
-        Configure::write('Sso.settingsAccess', null);
+        Configure::write('RockSoftwareUsers.settingsAccess', null);
         Client::clearMockResponses();
         parent::tearDown();
     }
 
     public function testAnonymousRequestIsSentToSignIn(): void
     {
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
 
-        $this->assertRedirectContains('/sso?redirect=%2Fsso%2Fsettings');
+        $this->assertRedirectContains('/auth?redirect=%2Fauth%2Fsettings');
     }
 
     public function testAccessIsTheApplicationsDecision(): void
     {
         $this->signIn($this->createUser('someone@example.test'));
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseCode(403);
 
         // No callable configured: anyone signed in, who is already in the
         // application's required group.
-        Configure::write('Sso.settingsAccess', null);
+        Configure::write('RockSoftwareUsers.settingsAccess', null);
         $this->signIn($this->createUser('admin@example.test'));
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseOk();
     }
 
@@ -90,14 +90,14 @@ class SettingsControllerTest extends TestCase
     {
         $this->signIn($this->createUser('admin@example.test'));
 
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
 
         $this->assertResponseOk();
         $this->assertResponseContains('Not configured yet');
         $this->assertResponseContains('<input type="url" name="issuer_url"');
         $this->assertResponseContains('<input type="text" name="client_id"');
         $this->assertResponseContains('<input type="password" name="client_secret"');
-        $this->assertResponseContains('https://app.example.test/sso/callback');
+        $this->assertResponseContains('https://app.example.test/auth/callback');
         $this->assertResponseNotContains('<select');
     }
 
@@ -106,16 +106,16 @@ class SettingsControllerTest extends TestCase
         $admin = $this->createUser('admin@example.test');
         $this->signIn($admin);
 
-        $this->post('/sso/settings/update', [
+        $this->post('/auth/settings/update', [
             'issuer_url' => rtrim(self::GOOD, '/'),
             'client_id' => 'app',
             'client_secret' => 'the-secret',
             'required_group' => 'app-staff',
         ]);
 
-        $this->assertRedirect('/sso/settings');
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $this->assertRedirect('/auth/settings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $setting = $settings->current();
         $this->assertNotNull($setting);
         $this->assertSame(self::GOOD, $setting->issuer_url);
@@ -123,11 +123,11 @@ class SettingsControllerTest extends TestCase
         $this->assertTrue($setting->is_enabled);
         $this->assertNotSame('the-secret', $setting->client_secret, 'stored encrypted');
         $this->assertSame('the-secret', $settings->clientSecret($setting));
-        /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
-        $changes = $this->fetchTable('Sso.SsoSettingChanges');
+        /** @var \RockSoftware\Users\Model\Table\SettingChangesTable $changes */
+        $changes = $this->fetchTable('RockSoftware/Users.SettingChanges');
         $this->assertSame($admin->id, $changes->latest()?->user_id);
 
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseContains('Connected.');
         $this->assertResponseContains('Last changed by Admin');
         $this->assertResponseNotContains('the-secret');
@@ -136,35 +136,35 @@ class SettingsControllerTest extends TestCase
     public function testServerThatDoesNotAnswerIsNotSaved(): void
     {
         $this->signIn($this->createUser('admin@example.test'));
-        $this->post('/sso/settings/update', [
+        $this->post('/auth/settings/update', [
             'issuer_url' => self::GOOD, 'client_id' => 'app', 'client_secret' => 's1', 'required_group' => '',
         ]);
 
-        $this->post('/sso/settings/update', [
+        $this->post('/auth/settings/update', [
             'issuer_url' => self::MISSING, 'client_id' => 'app', 'client_secret' => '', 'required_group' => '',
         ]);
 
         $this->assertResponseOk();
         $this->assertResponseContains('answered 404');
         $this->assertResponseContains('is-invalid');
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $this->assertSame(self::GOOD, $settings->current()?->issuer_url);
-        $this->assertSame(1, $this->fetchTable('Sso.SsoSettingChanges')->find()->count());
+        $this->assertSame(1, $this->fetchTable('RockSoftware/Users.SettingChanges')->find()->count());
     }
 
     public function testBlankSecretKeepsTheStoredOne(): void
     {
         $this->signIn($this->createUser('admin@example.test'));
-        $this->post('/sso/settings/update', [
+        $this->post('/auth/settings/update', [
             'issuer_url' => self::GOOD, 'client_id' => 'app', 'client_secret' => 'kept', 'required_group' => 'x',
         ]);
-        $this->post('/sso/settings/update', [
+        $this->post('/auth/settings/update', [
             'issuer_url' => self::OTHER, 'client_id' => 'app', 'client_secret' => '', 'required_group' => '',
         ]);
 
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $setting = $settings->current();
         $this->assertNotNull($setting);
         $this->assertSame(self::OTHER, $setting->issuer_url);
@@ -176,13 +176,13 @@ class SettingsControllerTest extends TestCase
     {
         $this->signIn($this->createUser('admin@example.test'));
 
-        $this->post('/sso/settings/update', [
+        $this->post('/auth/settings/update', [
             'issuer_url' => self::GOOD, 'client_id' => 'app', 'client_secret' => '', 'required_group' => '',
         ]);
 
         $this->assertResponseContains('Enter the client secret');
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $this->assertNull($settings->current());
     }
 
@@ -190,13 +190,13 @@ class SettingsControllerTest extends TestCase
     {
         $this->signIn($this->createUser('admin@example.test'));
 
-        $this->post('/sso/settings/test', [
+        $this->post('/auth/settings/test', [
             'issuer_url' => self::GOOD, 'client_id' => 'app', 'client_secret' => 'x', 'required_group' => '',
         ]);
 
         $this->assertResponseContains('The identity server answered. Nothing was saved.');
-        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        /** @var \RockSoftware\Users\Model\Table\SettingsTable $settings */
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $this->assertNull($settings->current());
     }
 
@@ -204,17 +204,17 @@ class SettingsControllerTest extends TestCase
     {
         $this->signIn($this->createUser('admin@example.test'));
 
-        $this->get('/sso/settings/test');
-        $this->assertRedirect('/sso/settings');
+        $this->get('/auth/settings/test');
+        $this->assertRedirect('/auth/settings');
 
-        $this->get('/sso/settings/update');
-        $this->assertRedirect('/sso/settings');
+        $this->get('/auth/settings/update');
+        $this->assertRedirect('/auth/settings');
     }
 
     public function testAllowProvisioningOpensAnHourAndIsRecorded(): void
     {
         $admin = $this->createUser('admin@example.test');
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $settings->store([
             'issuer_url' => self::GOOD,
             'client_id' => 'app-client',
@@ -225,52 +225,52 @@ class SettingsControllerTest extends TestCase
 
         $this->signIn($admin);
         $this->enableCsrfToken();
-        $this->post('/sso/settings/allow-provisioning');
+        $this->post('/auth/settings/allow-provisioning');
 
-        $this->assertRedirect('/sso/settings');
+        $this->assertRedirect('/auth/settings');
         $this->assertTrue($settings->provisioningOpen());
         $until = $settings->current()->provisioning_open_until;
         $this->assertTrue($until->greaterThan(DateTime::now()->addMinutes(59)));
         $this->assertTrue($until->lessThanOrEquals(DateTime::now()->addMinutes(60)));
-        $this->assertSame($admin->id, $this->fetchTable('Sso.SsoSettingChanges')->latest()?->user_id);
+        $this->assertSame($admin->id, $this->fetchTable('RockSoftware/Users.SettingChanges')->latest()?->user_id);
     }
 
     public function testPageShowsProvisioningState(): void
     {
         $admin = $this->createUser('admin@example.test');
         $this->signIn($admin);
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseContains('Waiting. Rock Software ID connects this application');
 
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $settings->store([
             'issuer_url' => self::GOOD,
             'client_id' => 'app-client',
             'client_secret' => 'the-secret',
             'is_enabled' => true,
         ]);
-        $this->fetchTable('Sso.SsoProvisionings')->saveOrFail($this->fetchTable('Sso.SsoProvisionings')->newEntity([
+        $this->fetchTable('RockSoftware/Users.Provisionings')->saveOrFail($this->fetchTable('RockSoftware/Users.Provisionings')->newEntity([
             'jti' => 'j1', 'issuer_url' => self::GOOD, 'client_id' => 'app-client',
         ]));
         $this->signIn($admin);
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseContains('Closed. Rock Software ID cannot change this connection.');
         $this->assertResponseContains('Allow Rock Software ID to connect again');
         $this->assertResponseContains('Connected by Rock Software ID,');
 
         $settings->openProvisioning(60);
         $this->signIn($admin);
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseContains('Open until');
         $this->assertResponseNotContains('Allow Rock Software ID to connect again');
     }
 
     public function testPageHidesProvisioningWhenSwitchedOff(): void
     {
-        Configure::write('Sso.provisioning', false);
+        Configure::write('RockSoftwareUsers.provisioning', false);
         $this->signIn($this->createUser('admin@example.test'));
-        $this->get('/sso/settings');
-        Configure::write('Sso.provisioning', SsoPlugin::DEFAULTS['provisioning']);
+        $this->get('/auth/settings');
+        Configure::write('RockSoftwareUsers.provisioning', UsersPlugin::DEFAULTS['provisioning']);
 
         $this->assertResponseOk();
         $this->assertResponseNotContains('Connection by Rock Software ID');
@@ -281,29 +281,29 @@ class SettingsControllerTest extends TestCase
         $admin = $this->createUser('admin@example.test');
         $this->connect(self::GOOD);
         $this->signInThroughProvider($admin);
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseContains('Not available. This application has no passwords of its own');
         $this->assertResponseNotContains('Turn password sign-in');
 
-        Configure::write('Sso.passwordSignIn', true);
+        Configure::write('RockSoftwareUsers.passwordSignIn', true);
         try {
             $this->signInThroughProvider($admin);
-            $this->get('/sso/settings');
+            $this->get('/auth/settings');
             $this->assertResponseContains('Turn password sign-in off');
             $this->assertResponseNotContains('Not available. This application has no passwords');
         } finally {
-            Configure::write('Sso.passwordSignIn', false);
+            Configure::write('RockSoftwareUsers.passwordSignIn', false);
         }
     }
 
     public function testPasswordSignInIsAllowedBeforeAnyConnection(): void
     {
-        $this->assertTrue($this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed());
+        $this->assertTrue($this->fetchTable('RockSoftware/Users.Settings')->passwordSignInAllowed());
     }
 
     public function testTurningPasswordSignInOffAndOn(): void
     {
-        Configure::write('Sso.passwordSignIn', true);
+        Configure::write('RockSoftwareUsers.passwordSignIn', true);
         $events = [];
         EventManager::instance()->on(SettingsController::EVENT_PASSWORD_SIGN_IN_CHANGED, function ($event) use (&$events): void {
             $events[] = $event->getData('enabled');
@@ -311,76 +311,76 @@ class SettingsControllerTest extends TestCase
         try {
             $admin = $this->createUser('admin@example.test');
             $this->connect(self::GOOD);
-            $settings = $this->fetchTable('Sso.SsoSettings');
+            $settings = $this->fetchTable('RockSoftware/Users.Settings');
 
             $this->signInThroughProvider($admin);
-            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
-            $this->assertRedirect('/sso/settings');
+            $this->post('/auth/settings/password-sign-in', ['enabled' => '0']);
+            $this->assertRedirect('/auth/settings');
             $this->assertFalse($settings->passwordSignInAllowed());
             $this->assertSame($admin->id, $settings->current()->password_sign_in_changed_by);
-            $this->assertSame($admin->id, $this->fetchTable('Sso.SsoSettingChanges')->latest()?->user_id);
+            $this->assertSame($admin->id, $this->fetchTable('RockSoftware/Users.SettingChanges')->latest()?->user_id);
 
             $this->signInThroughProvider($admin);
-            $this->get('/sso/settings');
+            $this->get('/auth/settings');
             $this->assertResponseContains('Turn password sign-in on');
             $this->assertResponseContains('Password sign-in turned off by Admin');
 
             // Back on works from any session allowed on the page.
             $this->signIn($admin);
-            $this->post('/sso/settings/password-sign-in', ['enabled' => '1']);
+            $this->post('/auth/settings/password-sign-in', ['enabled' => '1']);
             $this->assertTrue($settings->passwordSignInAllowed());
             $this->assertSame([false, true], $events);
         } finally {
-            Configure::write('Sso.passwordSignIn', false);
+            Configure::write('RockSoftwareUsers.passwordSignIn', false);
             EventManager::instance()->off(SettingsController::EVENT_PASSWORD_SIGN_IN_CHANGED);
         }
     }
 
     public function testPasswordSignInCannotBeTurnedOffFromAPasswordOrEmergencySession(): void
     {
-        Configure::write('Sso.passwordSignIn', true);
+        Configure::write('RockSoftwareUsers.passwordSignIn', true);
         try {
             $admin = $this->createUser('admin@example.test');
             $this->connect(self::GOOD);
-            $settings = $this->fetchTable('Sso.SsoSettings');
+            $settings = $this->fetchTable('RockSoftware/Users.Settings');
 
-            // A password session: no Sso keys at all.
+            // A password session: no plugin keys at all.
             $this->session(['Auth' => $admin]);
-            $this->get('/sso/settings');
+            $this->get('/auth/settings');
             $this->assertResponseContains('sign in through Rock Software ID first');
             $this->session(['Auth' => $admin]);
-            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
+            $this->post('/auth/settings/password-sign-in', ['enabled' => '0']);
             $this->assertTrue($settings->passwordSignInAllowed());
 
             // An emergency link.
             $this->session([
                 'Auth' => $admin,
-                'Sso' => ['authenticated' => true, 'method' => SsoSession::METHOD_EMERGENCY, 'establishedAt' => time()],
+                'RockSoftwareUsers' => ['authenticated' => true, 'method' => SignInSession::METHOD_EMERGENCY, 'establishedAt' => time()],
             ]);
-            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
+            $this->post('/auth/settings/password-sign-in', ['enabled' => '0']);
             $this->assertTrue($settings->passwordSignInAllowed());
         } finally {
-            Configure::write('Sso.passwordSignIn', false);
+            Configure::write('RockSoftwareUsers.passwordSignIn', false);
         }
     }
 
     public function testPasswordSignInStaysOnWhenTheServerDoesNotAnswer(): void
     {
-        Configure::write('Sso.passwordSignIn', true);
+        Configure::write('RockSoftwareUsers.passwordSignIn', true);
         try {
             $admin = $this->createUser('admin@example.test');
             $this->connect(self::MISSING);
 
             $this->signInThroughProvider($admin);
-            $this->post('/sso/settings/password-sign-in', ['enabled' => '0']);
+            $this->post('/auth/settings/password-sign-in', ['enabled' => '0']);
 
-            $this->assertTrue($this->fetchTable('Sso.SsoSettings')->passwordSignInAllowed());
+            $this->assertTrue($this->fetchTable('RockSoftware/Users.Settings')->passwordSignInAllowed());
             $this->assertFlashMessage(
                 'Password sign-in stays on: the identity server does not answer. ' .
                 'https://id.example.test/application/o/apq/.well-known/openid-configuration answered 404.',
             );
         } finally {
-            Configure::write('Sso.passwordSignIn', false);
+            Configure::write('RockSoftwareUsers.passwordSignIn', false);
         }
     }
 
@@ -390,24 +390,24 @@ class SettingsControllerTest extends TestCase
         $this->connect(self::GOOD);
         $this->signIn($admin);
 
-        $this->post('/sso/settings/sessions', [
+        $this->post('/auth/settings/sessions', [
             'session_max_hours' => '12',
             'session_idle_minutes' => '60',
             'session_event_retention_days' => '90',
         ]);
 
-        $this->assertRedirect('/sso/settings');
+        $this->assertRedirect('/auth/settings');
         $this->assertSame(
             ['max_hours' => 12, 'idle_minutes' => 60, 'retention_days' => 90],
-            $this->fetchTable('Sso.SsoSettings')->sessionLimits(),
+            $this->fetchTable('RockSoftware/Users.Settings')->sessionLimits(),
         );
-        $this->get('/sso/settings');
+        $this->get('/auth/settings');
         $this->assertResponseContains('name="session_idle_minutes" min="0" value="60"');
     }
 
     public function testAllowProvisioningNeedsPostAndAccess(): void
     {
-        $settings = $this->fetchTable('Sso.SsoSettings');
+        $settings = $this->fetchTable('RockSoftware/Users.Settings');
         $settings->store([
             'issuer_url' => self::GOOD,
             'client_id' => 'app-client',
@@ -416,14 +416,14 @@ class SettingsControllerTest extends TestCase
         ]);
         $this->signIn($this->createUser('admin@example.test'));
 
-        $this->get('/sso/settings/allow-provisioning');
-        $this->assertRedirect('/sso/settings');
+        $this->get('/auth/settings/allow-provisioning');
+        $this->assertRedirect('/auth/settings');
         $this->assertFalse($settings->provisioningOpen());
 
-        Configure::write('Sso.settingsAccess', fn($identity): bool => false);
+        Configure::write('RockSoftwareUsers.settingsAccess', fn($identity): bool => false);
         $this->enableCsrfToken();
-        $this->post('/sso/settings/allow-provisioning');
-        Configure::write('Sso.settingsAccess', null);
+        $this->post('/auth/settings/allow-provisioning');
+        Configure::write('RockSoftwareUsers.settingsAccess', null);
         $this->assertResponseCode(403);
         $this->assertFalse($settings->provisioningOpen());
     }
@@ -434,7 +434,7 @@ class SettingsControllerTest extends TestCase
      */
     private function connect(string $issuer): void
     {
-        $this->fetchTable('Sso.SsoSettings')->store([
+        $this->fetchTable('RockSoftware/Users.Settings')->store([
             'issuer_url' => $issuer,
             'client_id' => 'app-client',
             'client_secret' => 'the-secret',
@@ -450,7 +450,7 @@ class SettingsControllerTest extends TestCase
     {
         $this->session([
             'Auth' => $user,
-            'Sso' => ['authenticated' => true, 'method' => SsoSession::METHOD_OIDC, 'establishedAt' => time()],
+            'RockSoftwareUsers' => ['authenticated' => true, 'method' => SignInSession::METHOD_OIDC, 'establishedAt' => time()],
         ]);
     }
 
@@ -461,7 +461,7 @@ class SettingsControllerTest extends TestCase
         return $users->saveOrFail($users->newEntity([
             'email' => $email,
             'name' => $email === 'admin@example.test' ? 'Admin' : 'Someone',
-            'password' => '!sso:x',
+            'password' => '!rsu:x',
             'is_active' => true,
         ], ['accessibleFields' => ['*' => true], 'validate' => false]));
     }
@@ -474,7 +474,7 @@ class SettingsControllerTest extends TestCase
     {
         $this->session([
             'Auth' => $user,
-            'Sso' => ['authenticated' => true, 'method' => 'oidc', 'establishedAt' => time()],
+            'RockSoftwareUsers' => ['authenticated' => true, 'method' => 'oidc', 'establishedAt' => time()],
         ]);
     }
 }

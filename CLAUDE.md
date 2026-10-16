@@ -1,6 +1,6 @@
-# Agent guide — cakephp-sso
+# Agent guide — rocksoftware-cakephp-users
 
-A **CakePHP 5 plugin** (Composer package `makallio85/cakephp-sso`, public repository) that signs
+A **CakePHP 5 plugin** (Composer package `makallio85/rocksoftware-cakephp-users`, formerly `makallio85/cakephp-sso`; public repository; CakePHP plugin `RockSoftware/Users`) that signs
 users in through the central identity provider with OpenID Connect. It is installed by
 every Rock Software CakePHP application, so a change here reaches all of them. The
 container defined in `docker-compose.yml` is a development sandbox, not a deployment.
@@ -18,21 +18,21 @@ composer cs-check
 1. **Never merge a PR.** Open PRs against `dev` only, never `master`.
 2. **Security-critical code.** Token validation (`src/Service/OidcClient.php`), the
    callback's state/nonce/PKCE checks, and the redirect allowlist in
-   `SsoController::safeRedirect()` each have tests that prove a forged or replayed
+   `SignInController::safeRedirect()` each have tests that prove a forged or replayed
    response is refused. Never weaken a check to make a test pass; add a test for every
    new rejection path.
 3. **No application knowledge.** The plugin establishes identity and provides the pieces
    every application needs around it (sign-in page with password sign-in, session check
    and limits, sign-in history, the users page, the user menu, the settings page). Installing stays three steps (require, `addPlugin`, migrate): the
-   plugin wires its own middleware in `SsoPlugin::middleware()`, every setting has a
-   default in `SsoPlugin::DEFAULTS`, and its data lives in its own tables
-   (`sso_identities`), never in columns it asks an application to add. Only `email` on
+   plugin wires its own middleware in `UsersPlugin::middleware()`, every setting has a
+   default in `UsersPlugin::DEFAULTS`, and its data lives in its own tables
+   (`rock_software_users_identities`), never in columns it asks an application to add. Only `email` on
    `users` is assumed; other columns are written when present. Roles, permissions, audit logging and an application's own second
-   factor stay in the application, reached through the events and `Sso.settingsAccess`.
-4. **Texts are translatable.** Every user-facing string goes through `__d('sso', …)` and
-   has a Finnish entry in `resources/locales/fi/sso.po` in the same change.
-5. **Configuration**: the provider connection lives in `sso_settings` (secret encrypted
-   by `SecretCipher`); application shape lives in `Configure::read('Sso')`. Nothing in
+   factor stay in the application, reached through the events and `RockSoftwareUsers.settingsAccess`.
+4. **Texts are translatable.** Every user-facing string goes through `__d('rock_software_users', …)` and
+   has a Finnish entry in `resources/locales/fi/rock_software_users.po` in the same change.
+5. **Configuration**: the provider connection lives in `rock_software_users_settings` (secret encrypted
+   by `SecretCipher`); application shape lives in `Configure::read('RockSoftwareUsers')`. Nothing in
    environment variables.
 6. **Tests** run on SQLite against `tests/TestCase/FakeProvider.php`. Fixtures hold a
    fresh installation's rows only; `identity_source_types` rows come from the
