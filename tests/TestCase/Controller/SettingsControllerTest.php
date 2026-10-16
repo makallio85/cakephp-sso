@@ -282,13 +282,15 @@ class SettingsControllerTest extends TestCase
         $this->connect(self::GOOD);
         $this->signInThroughProvider($admin);
         $this->get('/sso/settings');
-        $this->assertResponseNotContains('Password sign-in');
+        $this->assertResponseContains('Not available. This application has no passwords of its own');
+        $this->assertResponseNotContains('Turn password sign-in');
 
         Configure::write('Sso.passwordSignIn', true);
         try {
             $this->signInThroughProvider($admin);
             $this->get('/sso/settings');
             $this->assertResponseContains('Turn password sign-in off');
+            $this->assertResponseNotContains('Not available. This application has no passwords');
         } finally {
             Configure::write('Sso.passwordSignIn', false);
         }
