@@ -129,3 +129,18 @@ msgstr "poistettu käyttäjä"
 
 msgid "Rock Software ID may connect this application during the next hour."
 msgstr "Rock Software ID voi yhdistää tämän sovelluksen seuraavan tunnin aikana."
+
+msgid "Connection by Rock Software ID"
+msgstr "Yhdistäminen Rock Software ID:stä"
+
+msgid "Waiting. Rock Software ID connects this application when its administrator runs new-id-app.sh; nothing needs to be typed here."
+msgstr "Odottaa. Rock Software ID yhdistää tämän sovelluksen, kun sen ylläpitäjä ajaa new-id-app.sh:n; tähän ei tarvitse kirjoittaa mitään."
+
+msgid "Open until {0}. Run new-id-app.sh now; the connection it sends closes this again."
+msgstr "Avoinna klo {0} asti. Aja new-id-app.sh nyt; sen lähettämä yhteys sulkee tämän taas."
+
+msgid "Closed. Rock Software ID cannot change this connection. Open it for an hour to set a new client secret or client; the next connection closes it again."
+msgstr "Suljettu. Rock Software ID ei voi muuttaa tätä yhteyttä. Avaa se tunniksi, kun asiakassalaisuus tai asiakas vaihdetaan; seuraava yhdistäminen sulkee sen taas."
+
+msgid "Allow Rock Software ID to connect again"
+msgstr "Salli Rock Software ID:n yhdistää uudelleen"
