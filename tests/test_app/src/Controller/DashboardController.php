@@ -7,24 +7,24 @@ use Cake\Controller\Controller;
 use Cake\Http\Response;
 
 /**
- * A page behind sign-in, standing in for the application's own pages.
+ * The application's own pages: no authentication component, because the
+ * plugin requires sign-in for every route that is not public.
  */
 class DashboardController extends Controller
 {
-    /**
-     * @return void
-     */
-    public function initialize(): void
-    {
-        parent::initialize();
-        $this->loadComponent('Authentication.Authentication');
-    }
-
     /**
      * @return \Cake\Http\Response
      */
     public function index(): Response
     {
         return $this->getResponse()->withStringBody('dashboard');
+    }
+
+    /**
+     * @return \Cake\Http\Response
+     */
+    public function health(): Response
+    {
+        return $this->getResponse()->withStringBody('ok');
     }
 }

@@ -121,6 +121,30 @@ final class FakeProvider
     }
 
     /**
+     * A provisioning token, as token exchange issues it for this client to
+     * the onboarding account.
+     *
+     * @param array<string, mixed> $claims Claims to set or override.
+     * @param string|null $privateKey Signs with another key when given.
+     * @return string
+     */
+    public function provisioningToken(array $claims = [], ?string $privateKey = null): string
+    {
+        $now = time();
+
+        return JWT::encode($claims + [
+            'iss' => self::ISSUER,
+            'aud' => self::CLIENT_ID,
+            'azp' => self::CLIENT_ID,
+            'sub' => 'onboarding-subject',
+            'preferred_username' => 'onboarding',
+            'jti' => bin2hex(random_bytes(16)),
+            'iat' => $now,
+            'exp' => $now + 3600,
+        ], $privateKey ?? $this->privateKey, 'RS256', self::KID);
+    }
+
+    /**
      * A private key the provider does not publish.
      *
      * @return string

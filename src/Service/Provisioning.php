@@ -1,0 +1,249 @@
+<?php
+declare(strict_types=1);
+
+namespace Sso\Service;
+
+use Cake\Cache\Cache;
+use Cake\Core\Configure;
+use Cake\Event\Event;
+use Cake\Event\EventManager;
+use Cake\Http\Client;
+use Cake\Log\Log;
+use Cake\ORM\Locator\LocatorAwareTrait;
+use Sso\Model\Entity\SsoSetting;
+use Sso\SsoPlugin;
+use Throwable;
+
+/**
+ * `POST /sso/provision`: the identity provider hands the application its
+ * connection (issuer, client ID, client secret, required group), so connecting
+ * an application needs no shell. rocksoftware-identity#5, *Connecting
+ * applications automatically*, holds the design.
+ *
+ * The request carries a bearer token the provider issued through token
+ * exchange for the very client it delivers. It is accepted only when:
+ *
+ * - the delivered issuer is under the trusted prefix, checked before anything
+ *   is fetched, so discovery and keys only ever come from the trusted
+ *   provider and an attacker cannot point the application elsewhere;
+ * - the token is signed with that issuer's key, and its `iss` and `aud` equal
+ *   the delivered issuer and client ID, so a token made for one application
+ *   cannot configure another;
+ * - it was issued to the onboarding account, at most `maxAge` seconds ago, and
+ *   its `jti` has not been used before;
+ * - the application accepts provisioning at all: before its first connection,
+ *   or inside a window an administrator opened on the settings page. Each
+ *   provisioning closes it again, so a connected application cannot be
+ *   rewired from outside.
+ *
+ * Every refusal is a bare 401 (a malformed request 400, too many 429), and the
+ * reason goes to the log without the request body, which holds the secret.
+ */
+class Provisioning
+{
+    use LocatorAwareTrait;
+
+    public const EVENT = 'Sso.provisioned';
+
+    private const RATE_KEY = 'sso_provision_rate';
+
+    /**
+     * @param \Cake\Http\Client|null $http Injected by tests.
+     */
+    public function __construct(private ?Client $http = null)
+    {
+    }
+
+    /**
+     * The provisioning settings, or null when the endpoint is switched off.
+     *
+     * @return array{issuerPrefix: string, subject: string, maxAge: int, rateLimit: int, rateWindow: int}|null
+     */
+    public static function config(): ?array
+    {
+        $config = Configure::read('Sso.provisioning');
+        if ($config === false) {
+            return null;
+        }
+        /** @var array{issuerPrefix: string, subject: string, maxAge: int, rateLimit: int, rateWindow: int} */
+        return array_replace(SsoPlugin::DEFAULTS['provisioning'], is_array($config) ? $config : []);
+    }
+
+    /**
+     * @param string $authorization The Authorization header.
+     * @param string $body The raw request body (JSON).
+     * @param string|null $remoteIp The client address, for the record.
+     * @return int The HTTP status to answer with.
+     */
+    public function handle(string $authorization, string $body, ?string $remoteIp): int
+    {
+        $config = self::config();
+        if ($config === null) {
+            return 404;
+        }
+        if (!$this->withinRateLimit($config)) {
+            Log::warning('SSO provisioning refused: too many requests.');
+
+            return 429;
+        }
+
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            return 400;
+        }
+        $issuer = $data['issuer'] ?? null;
+        $clientId = $data['client_id'] ?? null;
+        $secret = $data['client_secret'] ?? null;
+        $group = $data['required_group'] ?? null;
+        if (
+            !is_string($issuer) || !is_string($clientId) || !is_string($secret)
+            || ($group !== null && !is_string($group))
+            || $clientId === '' || $secret === '' || strlen($clientId) > 255 || strlen($secret) > 255
+            || ($group !== null && strlen($group) > 255)
+        ) {
+            return 400;
+        }
+        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        if (!$settings->provisioningOpen()) {
+            Log::warning('SSO provisioning refused: closed; an administrator can allow it on the settings page.');
+
+            return 401;
+        }
+        $issuer = rtrim($issuer, '/') . '/';
+        if (!self::trustedIssuer($issuer, $config['issuerPrefix'])) {
+            Log::warning('SSO provisioning refused: untrusted issuer.');
+
+            return 401;
+        }
+        if (!preg_match('/^Bearer ([A-Za-z0-9_\-.]+)$/', $authorization, $match)) {
+            return 401;
+        }
+
+        $setting = new SsoSetting();
+        $setting->set('issuer_url', $issuer, ['guard' => false]);
+        $setting->set('client_id', $clientId, ['guard' => false]);
+        try {
+            $client = new OidcClient($setting, $secret, $this->http);
+            // The keys must come from the trusted provider as well.
+            $jwksUri = (string)$client->discovery()['jwks_uri'];
+            if (!str_starts_with($jwksUri, self::origin($config['issuerPrefix']) . '/')) {
+                throw new SsoException('The discovery document names keys on another host.');
+            }
+            $claims = $client->validateProvisioningToken($match[1], $config['subject'], $config['maxAge']);
+        } catch (SsoException $e) {
+            Log::warning('SSO provisioning refused: ' . $e->getMessage());
+
+            return 401;
+        } catch (Throwable $e) {
+            Log::warning('SSO provisioning refused: ' . get_class($e));
+
+            return 401;
+        }
+
+        /** @var \Sso\Model\Table\SsoProvisioningsTable $provisionings */
+        $provisionings = $this->fetchTable('Sso.SsoProvisionings');
+        $jti = (string)$claims['jti'];
+        try {
+            $provisionings->getConnection()->transactional(
+                function () use (
+                    $provisionings,
+                    $settings,
+                    $jti,
+                    $issuer,
+                    $clientId,
+                    $secret,
+                    $group,
+                    $remoteIp,
+                ): void {
+                    if ($provisionings->used($jti)) {
+                        throw new SsoException('The provisioning token was used before.');
+                    }
+                    // Checked again inside the transaction: two requests in the
+                    // same window must not both get through.
+                    if (!$settings->provisioningOpen()) {
+                        throw new SsoException('Provisioning closed meanwhile.');
+                    }
+                    // The unique index on jti refuses a concurrent replay too.
+                    $provisionings->saveOrFail($provisionings->newEntity([
+                        'jti' => $jti,
+                        'issuer_url' => $issuer,
+                        'client_id' => $clientId,
+                        'remote_ip' => $remoteIp,
+                    ]));
+                    $settings->store([
+                        'issuer_url' => $issuer,
+                        'client_id' => $clientId,
+                        'client_secret' => $secret,
+                        'required_group' => $group === null || trim($group) === '' ? null : trim($group),
+                        'is_enabled' => true,
+                        'provisioning_open_until' => null,
+                    ]);
+                },
+            );
+        } catch (Throwable $e) {
+            $reason = $e instanceof SsoException ? $e->getMessage() : get_class($e);
+            Log::warning('SSO provisioning refused: ' . $reason);
+
+            return 401;
+        }
+
+        Log::notice(sprintf('SSO connection provisioned by %s for client %s.', $issuer, $clientId));
+        EventManager::instance()->dispatch(new Event(self::EVENT, $this, [
+            'issuer' => $issuer,
+            'clientId' => $clientId,
+            'requiredGroup' => $group,
+        ]));
+
+        return 204;
+    }
+
+    /**
+     * Whether an issuer is one application path directly under the trusted prefix.
+     *
+     * @param string $issuer The issuer, with one trailing slash.
+     * @param string $prefix The trusted prefix, e.g. `https://id.rocksoftware.fi/application/o/`.
+     * @return bool
+     */
+    public static function trustedIssuer(string $issuer, string $prefix): bool
+    {
+        if ($prefix === '' || !str_starts_with($prefix, 'https://') || !str_starts_with($issuer, $prefix)) {
+            return false;
+        }
+
+        return (bool)preg_match('#^[a-z0-9][a-z0-9_-]*/$#', substr($issuer, strlen($prefix)));
+    }
+
+    /**
+     * @param string $url A URL.
+     * @return string Its scheme and host (and port).
+     */
+    private static function origin(string $url): string
+    {
+        $parts = parse_url($url);
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return ($parts['scheme'] ?? '') . '://' . ($parts['host'] ?? '') . $port;
+    }
+
+    /**
+     * One counter for the endpoint: provisioning is rare, and behind a proxy
+     * every caller shares an address anyway.
+     *
+     * @param array{rateLimit: int, rateWindow: int} $config The settings.
+     * @return bool
+     */
+    private function withinRateLimit(array $config): bool
+    {
+        $cache = (string)Configure::read('Sso.cacheConfig', 'default');
+        $now = time();
+        $window = Cache::read(self::RATE_KEY, $cache);
+        if (!is_array($window) || ($window['start'] ?? 0) <= $now - $config['rateWindow']) {
+            $window = ['start' => $now, 'count' => 0];
+        }
+        $window['count']++;
+        Cache::write(self::RATE_KEY, $window, $cache);
+
+        return $window['count'] <= $config['rateLimit'];
+    }
+}

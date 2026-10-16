@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Sso\Model\Table;
 
+use Cake\Datasource\Exception\RecordNotFoundException;
+use Cake\I18n\DateTime;
 use Cake\ORM\Table;
 use Cake\Validation\Validator;
 use Sso\Model\Entity\SsoSetting;
@@ -65,6 +67,37 @@ class SsoSettingsTable extends Table
         $setting = $this->current();
 
         return $setting !== null && $setting->is_enabled ? $setting : null;
+    }
+
+    /**
+     * Whether Rock Software ID may connect the application now: before the
+     * first connection, or inside a window opened on the settings page.
+     *
+     * @return bool
+     */
+    public function provisioningOpen(): bool
+    {
+        $setting = $this->current();
+
+        return $setting === null
+            || ($setting->provisioning_open_until !== null && $setting->provisioning_open_until->isFuture());
+    }
+
+    /**
+     * Lets Rock Software ID connect the application again for a while.
+     *
+     * @param int $minutes How long.
+     * @return \Sso\Model\Entity\SsoSetting
+     */
+    public function openProvisioning(int $minutes): SsoSetting
+    {
+        $setting = $this->current();
+        if ($setting === null) {
+            throw new RecordNotFoundException('There is no connection yet; provisioning is open.');
+        }
+        $setting->provisioning_open_until = DateTime::now()->addMinutes($minutes);
+
+        return $this->saveOrFail($setting);
     }
 
     /**

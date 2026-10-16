@@ -25,7 +25,9 @@ class SsoControllerTest extends TestCase
     protected array $fixtures = [
         'plugin.Sso.SsoSettings',
         'plugin.Sso.SsoEmergencyLogins',
+        'plugin.Sso.SsoIdentities',
         'plugin.Sso.Users',
+        'plugin.Sso.LegacyUsers',
     ];
 
     private FakeProvider $provider;
@@ -87,13 +89,10 @@ class SsoControllerTest extends TestCase
         $this->completeSignIn([]);
 
         $this->assertRedirect('/messages');
-        $user = $this->fetchTable('Users')->find()->where(['external_id' => 'subject-1'])->firstOrFail();
+        $user = $this->userFor('subject-1');
         $this->assertSame('person@example.test', $user->email);
         $this->assertSame('Person One', $user->name);
-        $this->assertSame(
-            $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::SSO),
-            $user->identity_source_id,
-        );
+        $this->assertStringStartsWith('!sso:', $user->password, 'an unusable password fills the NOT NULL column');
         $this->assertSame($user->id, $this->sessionValue('Auth')->id);
         $this->assertTrue($this->sessionValue(SsoSession::AUTHENTICATED));
         $this->assertSame(SsoSession::METHOD_OIDC, $afterLogin);
@@ -107,8 +106,8 @@ class SsoControllerTest extends TestCase
 
         $users = $this->fetchTable('Users');
         $this->assertSame(1, $users->find()->count());
-        $linked = $users->get($local->id);
-        $this->assertSame('subject-1', $linked->external_id);
+        $this->assertSame($local->id, $this->userFor('subject-1')->id);
+        $this->assertSame('hashed', $users->get($local->id)->password, 'the local password is kept');
     }
 
     public function testCallbackDoesNotLinkOnUnverifiedEmail(): void
@@ -118,8 +117,8 @@ class SsoControllerTest extends TestCase
         $this->completeSignIn(['email_verified' => false]);
 
         // A second row with the same email breaks the unique rule: refused.
-        $this->assertRedirect('/users/login');
-        $this->assertNull($this->fetchTable('Users')->find()->where(['external_id' => 'subject-1'])->first());
+        $this->assertRedirect('/sso');
+        $this->assertNull($this->fetchTable('Sso.SsoIdentities')->findByExternalId('subject-1'));
         $this->assertNull($this->sessionValue('Auth'));
     }
 
@@ -127,7 +126,7 @@ class SsoControllerTest extends TestCase
     {
         $this->completeSignIn(['groups' => ['other-staff']]);
 
-        $this->assertRedirect('/users/login');
+        $this->assertRedirect('/sso');
         $this->assertSame(0, $this->fetchTable('Users')->find()->count());
         $this->assertNull($this->sessionValue('Auth'));
     }
@@ -136,7 +135,7 @@ class SsoControllerTest extends TestCase
     {
         $this->completeSignIn([], FakeProvider::foreignKey());
 
-        $this->assertRedirect('/users/login');
+        $this->assertRedirect('/sso');
         $this->assertNull($this->sessionValue('Auth'));
     }
 
@@ -144,7 +143,7 @@ class SsoControllerTest extends TestCase
     {
         $this->completeSignIn(['nonce' => 'not-the-nonce']);
 
-        $this->assertRedirect('/users/login');
+        $this->assertRedirect('/sso');
         $this->assertNull($this->sessionValue('Auth'));
     }
 
@@ -152,7 +151,7 @@ class SsoControllerTest extends TestCase
     {
         $this->completeSignIn(['aud' => 'another-client']);
 
-        $this->assertRedirect('/users/login');
+        $this->assertRedirect('/sso');
         $this->assertNull($this->sessionValue('Auth'));
     }
 
@@ -164,21 +163,21 @@ class SsoControllerTest extends TestCase
 
         $this->get('/sso/callback?code=abc&state=forged');
 
-        $this->assertRedirect('/users/login');
+        $this->assertRedirect('/sso');
         $this->assertNull($this->sessionValue('Auth'));
     }
 
     public function testBackchannelLogoutEndsSessions(): void
     {
         $this->completeSignIn([]);
-        $user = $this->fetchTable('Users')->find()->where(['external_id' => 'subject-1'])->firstOrFail();
-        $this->assertNull($user->sessions_valid_from);
+        $identities = $this->fetchTable('Sso.SsoIdentities');
+        $this->assertNull($identities->findByExternalId('subject-1')?->sessions_valid_from);
 
+        // No CSRF token: the plugin answers before the application's CSRF check.
         $this->post('/sso/backchannel-logout', ['logout_token' => $this->provider->logoutToken()]);
 
         $this->assertResponseCode(200);
-        $user = $this->fetchTable('Users')->get($user->id);
-        $this->assertInstanceOf(DateTime::class, $user->sessions_valid_from);
+        $this->assertInstanceOf(DateTime::class, $identities->findByExternalId('subject-1')?->sessions_valid_from);
     }
 
     public function testBackchannelLogoutRejectsIdToken(): void
@@ -203,7 +202,7 @@ class SsoControllerTest extends TestCase
         $this->assertSame(SsoSession::METHOD_EMERGENCY, $this->sessionValue(SsoSession::METHOD));
 
         $this->post('/sso/emergency/' . $token);
-        $this->assertRedirect('/users/login');
+        $this->assertRedirect('/sso');
     }
 
     public function testSignInPageOffersRockSoftwareId(): void
@@ -250,16 +249,52 @@ class SsoControllerTest extends TestCase
 
     public function testSignInStampsSessionAndLastLogin(): void
     {
-        Configure::write('Sso.lastLoginField', 'last_login_at');
-        try {
-            $this->completeSignIn([]);
-        } finally {
-            Configure::delete('Sso.lastLoginField');
-        }
+        $this->completeSignIn([]);
 
         $this->assertIsInt($this->sessionValue(SsoSession::ESTABLISHED_AT));
-        $user = $this->fetchTable('Users')->find()->where(['external_id' => 'subject-1'])->firstOrFail();
+        $identity = $this->fetchTable('Sso.SsoIdentities')->findByExternalId('subject-1');
+        $this->assertInstanceOf(DateTime::class, $identity?->last_login_at);
+    }
+
+    public function testDeletedUsersIdentityIsReplaced(): void
+    {
+        $this->completeSignIn([]);
+        $this->fetchTable('Users')->deleteAll([]);
+        // A fresh browser: the first token response and session are gone.
+        Client::clearMockResponses();
+        $this->provider->serveMetadata();
+        $_SESSION = [];
+
+        $this->completeSignIn([]);
+
+        $this->assertRedirect('/messages');
+        $this->assertSame(1, $this->fetchTable('Sso.SsoIdentities')->find()->count());
+        $this->assertSame('person@example.test', $this->userFor('subject-1')->email);
+    }
+
+    public function testLegacyUsersColumnsAreKeptInStep(): void
+    {
+        Configure::write('Sso.userModel', 'LegacyUsers');
+        Configure::write('Sso.lastLoginField', 'last_login_at');
+        Configure::write('Sso.sessionsValidFromField', 'sessions_valid_from');
+        try {
+            $this->completeSignIn([]);
+            $this->post('/sso/backchannel-logout', ['logout_token' => $this->provider->logoutToken()]);
+        } finally {
+            Configure::write('Sso.userModel', 'Users');
+            Configure::write('Sso.lastLoginField', null);
+            Configure::write('Sso.sessionsValidFromField', null);
+        }
+
+        $user = $this->fetchTable('LegacyUsers')->find()->firstOrFail();
+        $this->assertSame('subject-1', $user->external_id);
+        $this->assertSame(
+            $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::SSO),
+            $user->identity_source_id,
+        );
+        $this->assertInstanceOf(DateTime::class, $user->synced_at);
         $this->assertInstanceOf(DateTime::class, $user->last_login_at);
+        $this->assertInstanceOf(DateTime::class, $user->sessions_valid_from);
     }
 
     public function testDisabledSettingRefusesLogin(): void
@@ -268,7 +303,7 @@ class SsoControllerTest extends TestCase
 
         $this->get('/sso/login');
 
-        $this->assertRedirect('/users/login');
+        $this->assertRedirect('/sso');
     }
 
     /**
@@ -314,7 +349,18 @@ class SsoControllerTest extends TestCase
             'password' => 'hashed',
             'name' => 'Local User',
             'is_active' => true,
-            'identity_source_id' => $this->fetchTable('Sso.IdentitySourceTypes')->idFor(IdentitySourceType::LOCAL),
         ], ['accessibleFields' => ['*' => true]]));
+    }
+
+    /**
+     * @param string $subject The provider's subject identifier.
+     * @return \Cake\Datasource\EntityInterface
+     */
+    private function userFor(string $subject): EntityInterface
+    {
+        $identity = $this->fetchTable('Sso.SsoIdentities')->findByExternalId($subject);
+        $this->assertNotNull($identity, 'linked to ' . $subject);
+
+        return $this->fetchTable('Users')->get($identity->user_id);
     }
 }

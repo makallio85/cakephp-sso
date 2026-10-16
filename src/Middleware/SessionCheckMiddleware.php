@@ -23,12 +23,12 @@ use Throwable;
  *
  * - the user row is gone or deactivated (the identity provider disabled the
  *   account, or the application did);
- * - the session started before the user's `Sso.sessionsValidFromField`, which a
+ * - the session started before the identity's `sessions_valid_from`, which a
  *   back-channel logout moves forward.
  *
- * Add it after the Authentication middleware, which provides the identity.
- * Requests without an identity pass through untouched, so the sign-in routes
- * and the back-channel logout are unaffected.
+ * The plugin inserts it after the Authentication middleware, which provides
+ * the identity. Requests without an identity pass through untouched, so the
+ * sign-in routes and the back-channel logout are unaffected.
  */
 class SessionCheckMiddleware implements MiddlewareInterface
 {
@@ -59,7 +59,7 @@ class SessionCheckMiddleware implements MiddlewareInterface
 
         return (new Response())
             ->withStatus(302)
-            ->withLocation(Router::url(Configure::read('Sso.loginUrl', '/users/login'), true));
+            ->withLocation(Router::url(Configure::read('Sso.loginUrl'), true));
     }
 
     /**
@@ -83,12 +83,21 @@ class SessionCheckMiddleware implements MiddlewareInterface
         }
 
         $activeField = UserProvisioner::fields()['is_active'];
-        if ($activeField !== null && !$user->get($activeField)) {
+        if (
+            $activeField !== null
+            && $provisioner->users()->getSchema()->hasColumn($activeField)
+            && !$user->get($activeField)
+        ) {
             return true;
         }
 
-        $validFromField = Configure::read('Sso.sessionsValidFromField');
-        $validFrom = is_string($validFromField) ? $user->get($validFromField) : null;
+        $identity = $provisioner->identities()->findForUser((int)$user->get('id'));
+        $validFrom = $identity?->sessions_valid_from;
+        $legacyField = Configure::read('Sso.sessionsValidFromField');
+        $hasLegacyField = is_string($legacyField) && $provisioner->users()->getSchema()->hasColumn($legacyField);
+        if ($validFrom === null && $hasLegacyField) {
+            $validFrom = $user->get($legacyField);
+        }
         if (!$validFrom instanceof DateTimeInterface) {
             return false;
         }

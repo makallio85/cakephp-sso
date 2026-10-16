@@ -10,6 +10,7 @@ use Cake\Http\Exception\ForbiddenException;
 use Cake\Http\Response;
 use Cake\Routing\Router;
 use Sso\Service\ConnectionManager;
+use Sso\Service\Provisioning;
 use Sso\Service\UserProvisioner;
 
 /**
@@ -18,15 +19,20 @@ use Sso\Service\UserProvisioner;
  *   GET  /sso/settings          — the form, and whether the server answers
  *   POST /sso/settings/update   — test, then save
  *   POST /sso/settings/test     — test the values in the form, save nothing
+ *   POST /sso/settings/allow-provisioning — let Rock Software ID connect the
+ *                                 application again for an hour
  *
  * Who may open it is the application's decision: `Sso.settingsAccess`, a
- * callable receiving the identity and the request. Without one, nobody may.
+ * callable receiving the identity and the request. Without one, any signed-in
+ * user may, since signing in already required the application's group.
  *
  * @property \Authentication\Controller\Component\AuthenticationComponent $Authentication
  * @property \Cake\Controller\Component\FlashComponent $Flash
  */
 class SettingsController extends SettingsBaseController
 {
+    public const PROVISIONING_WINDOW_MINUTES = 60;
+
     /**
      * @return void
      */
@@ -54,8 +60,13 @@ class SettingsController extends SettingsBaseController
         }
 
         $identity = $this->Authentication->getIdentity();
+        if ($identity === null) {
+            // The Authentication component sends the anonymous request to sign in.
+            return;
+        }
         $access = Configure::read('Sso.settingsAccess');
-        if ($identity !== null && (!is_callable($access) || $access($identity, $this->getRequest()) !== true)) {
+        $allowed = $access === null || (is_callable($access) && $access($identity, $this->getRequest()) === true);
+        if (!$allowed) {
             throw new ForbiddenException(__d('sso', 'You may not change the identity provider settings.'));
         }
     }
@@ -126,6 +137,35 @@ class SettingsController extends SettingsBaseController
     }
 
     /**
+     * Opens provisioning for an hour, for a new client secret or client. The
+     * next provisioning closes it again.
+     *
+     * @return \Cake\Http\Response|null
+     */
+    public function allowProvisioning(): ?Response
+    {
+        if (!$this->getRequest()->is('post')) {
+            return $this->redirect(['action' => 'index']);
+        }
+        /** @var \Sso\Model\Table\SsoSettingsTable $settings */
+        $settings = $this->fetchTable('Sso.SsoSettings');
+        if ($settings->current() === null || Provisioning::config() === null) {
+            return $this->redirect(['action' => 'index']);
+        }
+
+        $userId = (int)$this->Authentication->getIdentity()?->getIdentifier();
+        $settings->getConnection()->transactional(function () use ($settings, $userId): void {
+            $settings->openProvisioning(self::PROVISIONING_WINDOW_MINUTES);
+            /** @var \Sso\Model\Table\SsoSettingChangesTable $changes */
+            $changes = $this->fetchTable('Sso.SsoSettingChanges');
+            $changes->saveOrFail($changes->newEntity(['user_id' => $userId]));
+        });
+        $this->Flash->success(__d('sso', 'Rock Software ID may connect this application during the next hour.'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /**
      * @return array<string, string>
      */
     private function submitted(): array
@@ -157,7 +197,10 @@ class SettingsController extends SettingsBaseController
         if ($latest !== null) {
             $provisioner = new UserProvisioner();
             $user = $provisioner->users()->find()->where(['id' => $latest->user_id])->first();
-            $nameField = UserProvisioner::fields()['name'] ?? UserProvisioner::fields()['email'];
+            $nameField = UserProvisioner::fields()['name'];
+            if ($nameField === null || !$provisioner->users()->getSchema()->hasColumn($nameField)) {
+                $nameField = UserProvisioner::fields()['email'];
+            }
             $changedBy = $user instanceof EntityInterface ? (string)$user->get($nameField) : null;
         }
 
@@ -172,6 +215,9 @@ class SettingsController extends SettingsBaseController
             ),
             'lastChange' => $latest,
             'lastChangedBy' => $changedBy,
+            'lastProvisioning' => $this->fetchTable('Sso.SsoProvisionings')->latest(),
+            'provisioningEnabled' => Provisioning::config() !== null,
+            'provisioningOpenUntil' => (new ConnectionManager())->current()?->provisioning_open_until,
         ]);
         $this->render('index');
     }
