@@ -27,7 +27,7 @@ $this->assign('title', __d('sso', 'Identity provider'));
 <div class="sso-settings" style="max-width: 980px">
     <div class="mb-3">
         <h1 class="h4 mb-1"><?= __d('sso', 'Identity provider') ?></h1>
-        <p class="text-body-secondary mb-0"><?= __d('sso', 'People sign in only through Rock Software ID. These settings say which server and which client.') ?></p>
+        <p class="text-body-secondary mb-0"><?= __d('sso', 'People sign in through Rock Software ID. These settings say which server and which client.') ?></p>
     </div>
 
     <?php if (!$configured) : ?>
@@ -159,7 +159,7 @@ $this->assign('title', __d('sso', 'Identity provider'));
                         <?php if (!$passwordSignInEnabled) : ?>
                             <?= __d('sso', 'Off. Only Rock Software ID signs people in. Turning it back on lets everyone use their password again at once.') ?>
                         <?php elseif ($canTurnPasswordSignInOff) : ?>
-                            <?= __d('sso', 'On. People can also sign in with this application\'s own email and password. Turn it off once everyone has signed in through Rock Software ID once.') ?>
+                            <?= __d('sso', 'On. People can also sign in with their email address and password on the sign-in page. Turn it off once everyone has signed in through Rock Software ID once.') ?>
                         <?php else : ?>
                             <?= __d('sso', 'On. To turn it off, sign in through Rock Software ID first, so nobody can lock themselves out.') ?>
                         <?php endif; ?>

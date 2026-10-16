@@ -40,8 +40,8 @@ msgstr "Ei vielä määritetty. Anna yhteystiedot alla; ne tallennetaan, kun pal
 msgid "Not saved. {0} The previous settings are still in use."
 msgstr "Ei tallennettu. {0} Aiemmat asetukset ovat yhä käytössä."
 
-msgid "People sign in only through Rock Software ID. These settings say which server and which client."
-msgstr "Kirjautuminen tapahtuu vain Rock Software ID:llä. Nämä asetukset kertovat, mikä palvelin ja mikä asiakas."
+msgid "People sign in through Rock Software ID. These settings say which server and which client."
+msgstr "Kirjautuminen tapahtuu Rock Software ID:llä. Nämä asetukset kertovat, mikä palvelin ja mikä asiakas."
 
 msgid "Redirect URI to register at the provider"
 msgstr "Paluuosoite, joka rekisteröidään tunnistuspalveluun"
@@ -151,8 +151,8 @@ msgstr "Kirjautuminen salasanalla"
 msgid "Off. Only Rock Software ID signs people in. Turning it back on lets everyone use their password again at once."
 msgstr "Pois päältä. Vain Rock Software ID kirjaa ihmiset sisään. Kun sen kytkee takaisin päälle, kaikki voivat heti taas käyttää salasanaansa."
 
-msgid "On. People can also sign in with this application's own email and password. Turn it off once everyone has signed in through Rock Software ID once."
-msgstr "Päällä. Ihmiset voivat kirjautua myös tämän sovelluksen omalla sähköpostilla ja salasanalla. Kytke se pois, kun jokainen on kirjautunut kerran Rock Software ID:llä."
+msgid "On. People can also sign in with their email address and password on the sign-in page. Turn it off once everyone has signed in through Rock Software ID once."
+msgstr "Päällä. Kirjautumissivulla voi kirjautua myös sähköpostilla ja salasanalla. Kytke se pois, kun jokainen on kirjautunut kerran Rock Software ID:llä."
 
 msgid "On. To turn it off, sign in through Rock Software ID first, so nobody can lock themselves out."
 msgstr "Päällä. Kirjaudu ensin Rock Software ID:llä, jotta voit kytkeä sen pois – näin kukaan ei lukitse itseään ulos."
