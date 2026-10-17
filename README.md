@@ -60,6 +60,10 @@ translation (`resources/locales/fi/rock_software_users.po`, domain `rock_softwar
 - A required provider group (`rock_software_users_settings.required_group`) gates access.
 - The connection lives in `rock_software_users_settings`; the client secret is encrypted with a key
   derived from `Security.salt`.
+- After every `bin/cake migrations migrate` or `rollback`, the plugin empties the schema
+  cache (`cacheMetadata`) of the application's connections, so a migration that changes a
+  table (moving over drops `users.password`, for one) never leaves queries reading the old
+  layout.
 
 Authorization stays in the application. The plugin only establishes who the user is.
 

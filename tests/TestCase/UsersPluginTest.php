@@ -4,7 +4,11 @@ declare(strict_types=1);
 namespace RockSoftware\Users\Test\TestCase;
 
 use Authentication\Middleware\AuthenticationMiddleware;
+use Cake\Cache\Cache;
 use Cake\Core\Configure;
+use Cake\Datasource\ConnectionManager;
+use Cake\Event\Event;
+use Cake\Event\EventManager;
 use Cake\Http\Middleware\BodyParserMiddleware;
 use Cake\Http\Middleware\CsrfProtectionMiddleware;
 use Cake\Http\MiddlewareQueue;
@@ -27,6 +31,26 @@ class UsersPluginTest extends TestCase
         Configure::write('RockSoftwareUsers.authentication', 'auto');
         Configure::write('RockSoftwareUsers.requireSignIn', 'auto');
         parent::tearDown();
+    }
+
+    public function testMigratingClearsTheSchemaCache(): void
+    {
+        (new UsersPlugin())->bootstrap(new Application(CONFIG));
+        Cache::setConfig('rsu_test_model', ['className' => 'Array']);
+        ConnectionManager::setConfig('rsu_cached', [
+            'url' => 'sqlite:///:memory:',
+            'cacheMetadata' => 'rsu_test_model',
+        ]);
+        Cache::write('rsu_cached_users', 'the table before the migration', 'rsu_test_model');
+
+        try {
+            EventManager::instance()->dispatch(new Event('Migration.afterMigrate'));
+
+            $this->assertNull(Cache::read('rsu_cached_users', 'rsu_test_model'));
+        } finally {
+            ConnectionManager::drop('rsu_cached');
+            Cache::drop('rsu_test_model');
+        }
     }
 
     public function testWiresAnApplicationWithoutAuthentication(): void
