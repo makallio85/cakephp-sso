@@ -4,10 +4,13 @@ declare(strict_types=1);
 namespace RockSoftware\Users;
 
 use Authentication\Middleware\AuthenticationMiddleware;
+use Cake\Cache\Cache;
 use Cake\Console\CommandCollection;
 use Cake\Core\BasePlugin;
 use Cake\Core\Configure;
 use Cake\Core\PluginApplicationInterface;
+use Cake\Datasource\ConnectionManager;
+use Cake\Event\EventManager;
 use Cake\Http\Middleware\BodyParserMiddleware;
 use Cake\Http\Middleware\CsrfProtectionMiddleware;
 use Cake\Http\MiddlewareQueue;
@@ -141,6 +144,37 @@ class UsersPlugin extends BasePlugin
     {
         self::applyDefaults();
         self::loadTranslations();
+        // A migration that changes a table leaves the schema cache describing
+        // the old one, and every query on that table fails until the cache is
+        // cleared: `users` lost its password column that way when an
+        // application moved to this plugin.
+        EventManager::instance()->on('Migration.afterMigrate', [self::class, 'clearSchemaCache']);
+        EventManager::instance()->on('Migration.afterRollback', [self::class, 'clearSchemaCache']);
+    }
+
+    /**
+     * Empties the schema cache of every configured connection that keeps one
+     * (`cacheMetadata`), without connecting to any database.
+     *
+     * @return void
+     */
+    public static function clearSchemaCache(): void
+    {
+        $configs = [];
+        foreach (ConnectionManager::configured() as $name) {
+            $cacheMetadata = ConnectionManager::getConfig($name)['cacheMetadata'] ?? null;
+            if ($cacheMetadata === true) {
+                $cacheMetadata = '_cake_model_';
+            }
+            if (is_string($cacheMetadata) && $cacheMetadata !== '') {
+                $configs[$cacheMetadata] = true;
+            }
+        }
+        foreach (array_keys($configs) as $config) {
+            if (in_array($config, Cache::configured(), true)) {
+                Cache::clear($config);
+            }
+        }
     }
 
     /**
